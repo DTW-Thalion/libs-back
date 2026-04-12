@@ -174,6 +174,46 @@ BOOL CALLBACK LoadDisplayMonitorInfo(HMONITOR hMonitor,
 }
 
 
+#if (BUILD_GRAPHICS==GRAPHICS_winlib)
+/**
+ * Release the GDI backing store resources for a window.
+ * Selects the original object back, deletes the bitmap and DC,
+ * and NULLs out the win fields.
+ */
+static void
+_releaseGDIBackingStore(WIN_INTERN *win)
+{
+  if (win->hdc)
+    {
+      HGDIOBJ old = SelectObject(win->hdc, win->old);
+      DeleteObject(old);
+      DeleteDC(win->hdc);
+      win->hdc = NULL;
+      win->old = NULL;
+    }
+}
+
+/**
+ * Create a new GDI backing store for a window, sized to the client rect.
+ * hwnd is the native window handle.
+ */
+static void
+_createGDIBackingStore(WIN_INTERN *win, HWND hwnd)
+{
+  HDC hdc, hdc2;
+  HBITMAP hbitmap;
+  RECT r;
+
+  GetClientRect(hwnd, &r);
+  hdc = GetDC(hwnd);
+  hdc2 = CreateCompatibleDC(hdc);
+  hbitmap = CreateCompatibleBitmap(hdc, r.right - r.left, r.bottom - r.top);
+  win->old = SelectObject(hdc2, hbitmap);
+  win->hdc = hdc2;
+  ReleaseDC(hwnd, hdc);
+}
+#endif /* BUILD_GRAPHICS==GRAPHICS_winlib */
+
 @implementation WIN32Server
 
 - (BOOL) handlesWindowDecorations
@@ -713,30 +753,13 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
 {
 #if (BUILD_GRAPHICS==GRAPHICS_winlib)
   WIN_INTERN *win = (WIN_INTERN *)GetWindowLongPtr((HWND)hwnd, GWLP_USERDATA);
-  
+
   // FIXME: We should check if the size really did change.
   if (win->useHDC)
     {
-      HDC hdc, hdc2;
-      HBITMAP hbitmap;
-      HGDIOBJ old;
-      RECT r;
-      
-      old = SelectObject(win->hdc, win->old);
-      DeleteObject(old);
-      DeleteDC(win->hdc);
-      win->hdc = NULL;
-      win->old = NULL;
-      
-      GetClientRect((HWND)hwnd, &r);
-      hdc = GetDC((HWND)hwnd);
-      hdc2 = CreateCompatibleDC(hdc);
-      hbitmap = CreateCompatibleBitmap(hdc, r.right - r.left, r.bottom - r.top);
-      win->old = SelectObject(hdc2, hbitmap);
-      win->hdc = hdc2;
-      
-      ReleaseDC((HWND)hwnd, hdc);
-        
+      _releaseGDIBackingStore(win);
+      _createGDIBackingStore(win, hwnd);
+
       // After resizing the backing store, we need to redraw the window
       win->backingStoreEmpty = YES;
     }
@@ -1707,32 +1730,15 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
 #if (BUILD_GRAPHICS==GRAPHICS_winlib)
   if (win->useHDC)
     {
-      HGDIOBJ old;
-
-      old = SelectObject(win->hdc, win->old);
-      DeleteObject(old);
-      DeleteDC(win->hdc);
-      win->hdc = NULL;
-      win->old = NULL;
+      _releaseGDIBackingStore(win);
       win->useHDC = NO;
     }
 
   if (type != NSBackingStoreNonretained)
     {
-      HDC hdc, hdc2;
-      HBITMAP hbitmap;
-      RECT r;
-
-      GetClientRect((HWND)winNum, &r);
-      hdc = GetDC((HWND)winNum);
-      hdc2 = CreateCompatibleDC(hdc);
-      hbitmap = CreateCompatibleBitmap(hdc, r.right - r.left, r.bottom - r.top);
-      win->old = SelectObject(hdc2, hbitmap);
-      win->hdc = hdc2;
+      _createGDIBackingStore(win, (HWND)winNum);
       win->useHDC = YES;
       win->backingStoreEmpty = YES;
-
-      ReleaseDC((HWND)winNum, hdc);
     }
   else
 #endif
@@ -1740,7 +1746,7 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
       win->useHDC = NO;
       win->hdc = NULL;
     }
-    
+
   // Save updated window backing store type...
   win->type = type;
 }
@@ -2057,24 +2063,8 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
       && (r.right - r.left != r2.right - r2.left)
       && (r.bottom - r.top != r2.bottom - r2.top))
     {
-      HDC hdc, hdc2;
-      HBITMAP hbitmap;
-      HGDIOBJ old;
-      
-      old = SelectObject(win->hdc, win->old);
-      DeleteObject(old);
-      DeleteDC(win->hdc);
-      win->hdc = NULL;
-      win->old = NULL;
-      
-      GetClientRect((HWND)winNum, &r);
-      hdc = GetDC((HWND)winNum);
-      hdc2 = CreateCompatibleDC(hdc);
-      hbitmap = CreateCompatibleBitmap(hdc, r.right - r.left, r.bottom - r.top);
-      win->old = SelectObject(hdc2, hbitmap);
-      win->hdc = hdc2;
-      
-      ReleaseDC((HWND)winNum, hdc);
+      _releaseGDIBackingStore(win);
+      _createGDIBackingStore(win, (HWND)winNum);
     }
 #endif
 }

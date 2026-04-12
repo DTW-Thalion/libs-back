@@ -510,7 +510,7 @@ WaylandServer (WindowOps)
 - (void)titlewindow:(NSString *)window_title:(int)win
 {
   NSDebugLog(@"titlewindow: win=%d title=%@", win, window_title);
-  if (window_title == @"Window")
+  if ([window_title isEqualToString: @"Window"])
     {
       return;
     }
