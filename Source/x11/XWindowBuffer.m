@@ -25,6 +25,8 @@
 #include <config.h>
 
 #include <Foundation/NSUserDefaults.h>
+#include <Foundation/NSLock.h>
+#include <Foundation/NSException.h>
 
 #include "x11/XGServer.h"
 #include "x11/XGServerWindow.h"
@@ -40,6 +42,7 @@
 
 static XWindowBuffer **window_buffers;
 static int num_window_buffers;
+static NSLock *window_buffers_lock;
 
 
 static int use_shape_hack = 0; /* this is an ugly hack : ) */
@@ -174,6 +177,7 @@ no_xshm:
 {
   NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
   use_shape_hack = [ud boolForKey: @"XWindowBuffer-shape-hack"];
+  window_buffers_lock = [NSLock new];
 }
 
 + windowBufferForWindow: (gswindow_device_t *)awindow
@@ -184,6 +188,7 @@ no_xshm:
   int drawing_depth;
   Visual *visual;
 
+  [window_buffers_lock lock];
   for (i = 0; i < num_window_buffers; i++)
     {
       if (window_buffers[i]->window == awindow)
@@ -197,9 +202,10 @@ no_xshm:
         sizeof(XWindowBuffer *) * (num_window_buffers + 1));
       if (!window_buffers)
         {
-          NSLog(@"Out of memory (failed to allocate %lu bytes)",
-                (unsigned long)sizeof(XWindowBuffer *) * (num_window_buffers + 1));
-          exit(1);
+          [window_buffers_lock unlock];
+          [NSException raise: NSMallocException
+                      format: @"Out of memory (failed to allocate %lu bytes)",
+                      (unsigned long)sizeof(XWindowBuffer *) * (num_window_buffers + 1)];
         }
       window_buffers[num_window_buffers++] = wi;
     }
@@ -208,6 +214,7 @@ no_xshm:
       wi = window_buffers[i];
       wi = RETAIN(wi);
     }
+  [window_buffers_lock unlock];
 
   wi->DI = *aDI;
   wi->gc = awindow->gc;
@@ -697,6 +704,7 @@ static int warn = 0;
 {
   int i;
 
+  [window_buffers_lock lock];
   for (i = 0; i < num_window_buffers; i++)
     if (window_buffers[i] == self) break;
   if (i < num_window_buffers)
@@ -705,6 +713,7 @@ static int warn = 0;
       for (; i < num_window_buffers; i++)
         window_buffers[i] = window_buffers[i + 1];
     }
+  [window_buffers_lock unlock];
 
   if (ximage)
     {

@@ -36,6 +36,7 @@
 #include <Foundation/NSDebug.h>
 #include <Foundation/NSException.h>
 #include <Foundation/NSThread.h>
+#include <Foundation/NSLock.h>
 #include <AppKit/DPSOperators.h>
 #include <AppKit/NSApplication.h>
 #include <AppKit/NSCursor.h>
@@ -79,7 +80,10 @@
 static BOOL handlesWindowDecorations = YES;
 static int _wmAppIcon = -1;
 
-#define WINDOW_WITH_TAG(windowNumber) (gswindow_device_t *)NSMapGet(windowtags, (void *)(uintptr_t)windowNumber)
+#define WINDOW_WITH_TAG(windowNumber) \
+  ({ [windowmaps_lock lock]; \
+     gswindow_device_t *_w = (gswindow_device_t *)NSMapGet(windowtags, (void *)(uintptr_t)windowNumber); \
+     [windowmaps_lock unlock]; _w; })
 
 /* Current mouse grab window */
 static gswindow_device_t *grab_window = NULL;
@@ -87,6 +91,9 @@ static gswindow_device_t *grab_window = NULL;
 /* Keep track of windows */
 static NSMapTable *windowmaps = NULL;
 static NSMapTable *windowtags = NULL;
+
+/* Lock protecting windowmaps and windowtags from concurrent access */
+static NSRecursiveLock *windowmaps_lock = nil;
 
 /* Track used window numbers */
 static int	last_win_num = 0;
@@ -479,7 +486,11 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
 
 + (gswindow_device_t *) _windowForXWindow: (Window)xWindow
 {
-  return NSMapGet(windowmaps, (void *)xWindow);
+  gswindow_device_t *win;
+  [windowmaps_lock lock];
+  win = NSMapGet(windowmaps, (void *)xWindow);
+  [windowmaps_lock unlock];
+  return win;
 }
 
 + (gswindow_device_t *) _windowWithTag: (int)windowNumber
@@ -941,8 +952,10 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
   window->number = last_win_num;
 
   // Insert window into the mapping
+  [windowmaps_lock lock];
   NSMapInsert(windowmaps, (void*)(uintptr_t)window->ident, window);
   NSMapInsert(windowtags, (void*)(uintptr_t)window->number, window);
+  [windowmaps_lock unlock];
   [self _setWindowOwnedByServer: window->number];
 
   if (![self _tryRequestFrameExtents: window])
@@ -1280,8 +1293,10 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
     }
 
   window->xframe = NSMakeRect(x, y, width, height);
+  [windowmaps_lock lock];
   NSMapInsert (windowtags, (void*)(uintptr_t)window->number, window);
   NSMapInsert (windowmaps, (void*)(uintptr_t)window->ident,  window);
+  [windowmaps_lock unlock];
   return window;
 }
 
@@ -1292,6 +1307,7 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
   if (windowmaps)
     return;
 
+  windowmaps_lock = [NSRecursiveLock new];
   windowmaps = NSCreateMapTable(NSNonOwnedPointerMapKeyCallBacks,
 				 NSNonOwnedPointerMapValueCallBacks, 20);
   windowtags = NSCreateMapTable(NSIntMapKeyCallBacks,
@@ -2060,8 +2076,10 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
   window->number = last_win_num;
 
   // Insert window into the mapping
+  [windowmaps_lock lock];
   NSMapInsert(windowmaps, (void*)(uintptr_t)window->ident, window);
   NSMapInsert(windowtags, (void*)(uintptr_t)window->number, window);
+  [windowmaps_lock unlock];
   [self _setWindowOwnedByServer: window->number];
 
   return window->number;
@@ -2178,8 +2196,10 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
   window->number = last_win_num;
 
   // Insert window into the mapping
+  [windowmaps_lock lock];
   NSMapInsert(windowmaps, (void*)(uintptr_t)window->ident, window);
   NSMapInsert(windowtags, (void*)(uintptr_t)window->number, window);
+  [windowmaps_lock unlock];
   [self _setWindowOwnedByServer: window->number];
   return window->number;
 }
@@ -2213,7 +2233,9 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
         {
 	  generic.cachedWindow = 0;
 	}
+      [windowmaps_lock lock];
       NSMapRemove(windowmaps, (void*)window->ident);
+      [windowmaps_lock unlock];
     }
 
   if (window->buffer)
@@ -2223,7 +2245,9 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
   if (window->region)
     XDestroyRegion (window->region);
   RELEASE(window->exposedRects);
+  [windowmaps_lock lock];
   NSMapRemove(windowtags, (void*)(uintptr_t)win);
+  [windowmaps_lock unlock];
   NSZoneFree(0, window);
 }
 

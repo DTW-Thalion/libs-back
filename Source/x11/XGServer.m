@@ -43,6 +43,8 @@
 #include <Foundation/NSDistributedNotificationCenter.h>
 
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
 /* Terminate cleanly if we get a signal to do so */
 static void
 terminate(int sig)
@@ -78,6 +80,16 @@ terminate(int sig)
 #include <X11/keysym.h>
 
 extern int XGErrorHandler(Display *display, XErrorEvent *err);
+
+static int
+gs_x11_ioerror_handler(Display *dpy)
+{
+  fprintf(stderr,
+          "GNUstep: Fatal X11 I/O error (display server disconnected)\n");
+  /* XIOErrorHandler must not return */
+  _exit(1);
+  return 0; /* not reached */
+}
 
 static NSString *
 _parse_display_name(NSString *name, int *dn, int *sn)
@@ -499,6 +511,7 @@ static NSString	*startupID = nil;
     [self screenList];
 
   XSetErrorHandler(XGErrorHandler);
+  XSetIOErrorHandler(gs_x11_ioerror_handler);
 
 #ifdef HAVE_X11_EXTENSIONS_SYNC_H
   {

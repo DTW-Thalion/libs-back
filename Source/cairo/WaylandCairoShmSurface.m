@@ -53,7 +53,7 @@ finishBuffer(struct pool_buffer *buf)
 {
   // The buffer can be deleted if it has been released by the compositor
   // and if not used by the cairo surface
-  if(buf == NULL || buf->busy || buf->surface != NULL)
+  if(buf == NULL || __atomic_load_n(&buf->busy, __ATOMIC_ACQUIRE) || buf->surface != NULL)
   {
     return;
   }
@@ -73,7 +73,7 @@ static void
 buffer_handle_release(void *data, struct wl_buffer *wl_buffer)
 {
   struct pool_buffer *buffer = data;
-  buffer->busy = false;
+  __atomic_store_n(&buffer->busy, false, __ATOMIC_RELEASE);
   // If the buffer was not released before dealloc
   finishBuffer(buffer);
 }
@@ -138,6 +138,7 @@ createShmBuffer(int width, int height, struct wl_shm *shm)
       buf->poolfd = createPoolFile(size);
       if (buf->poolfd == -1)
         {
+          free(buf);
           return NULL;
         }
 
@@ -145,6 +146,8 @@ createShmBuffer(int width, int height, struct wl_shm *shm)
 	= mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, buf->poolfd, 0);
       if (data == MAP_FAILED)
         {
+          close(buf->poolfd);
+          free(buf);
           return NULL;
         }
 

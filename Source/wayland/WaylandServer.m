@@ -264,6 +264,37 @@ NSToWayland(struct window *window, int ns_y)
 - (void)dealloc
 {
   NSDebugLog(@"Destroying Wayland Server");
+
+  if (wlconfig)
+    {
+      /* Destroy any remaining windows */
+      struct window *win, *tmp;
+      wl_list_for_each_safe(win, tmp, &wlconfig->window_list, link)
+        {
+          wl_list_remove(&win->link);
+          if (win->surface)
+            wl_surface_destroy(win->surface);
+          free(win);
+        }
+
+      /* Release Wayland globals */
+      if (wlconfig->wm_base)
+        xdg_wm_base_destroy(wlconfig->wm_base);
+      if (wlconfig->shm)
+        wl_shm_destroy(wlconfig->shm);
+      if (wlconfig->compositor)
+        wl_compositor_destroy(wlconfig->compositor);
+      if (wlconfig->registry)
+        wl_registry_destroy(wlconfig->registry);
+
+      /* Disconnect from the Wayland display */
+      if (wlconfig->display)
+        wl_display_disconnect(wlconfig->display);
+
+      free(wlconfig);
+      wlconfig = NULL;
+    }
+
   [super dealloc];
 }
 

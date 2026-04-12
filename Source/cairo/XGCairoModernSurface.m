@@ -113,13 +113,12 @@
 {
   cairo_t *windowCtx = cairo_create(_windowSurface);
 
-  double backupOffsetX, backupOffsetY;
+  double offsetX, offsetY;
 
-  // Temporairly cancel the device offset on the back buffer since
-  // we want to work with raw X11 pixel coordinates
-
-  cairo_surface_get_device_offset(_surface, &backupOffsetX, &backupOffsetY);
-  cairo_surface_set_device_offset(_surface, 0, 0);
+  // Read the current device offset so we can compensate for it when
+  // blitting to the window surface, without mutating _surface state
+  // (which would be unsafe if another thread is drawing concurrently).
+  cairo_surface_get_device_offset(_surface, &offsetX, &offsetY);
 
   // Copy the desired rectangle from the back buffer to the
   // front buffer
@@ -127,21 +126,13 @@
   // FIXME: should round
   cairo_rectangle(windowCtx, rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
   cairo_clip(windowCtx);
-  cairo_set_source_surface(windowCtx, _surface, 0, 0);
+  // Compensate for the device offset by shifting the source surface
+  // in the opposite direction, so we blit in raw X11 pixel coordinates.
+  cairo_set_source_surface(windowCtx, _surface, -offsetX, -offsetY);
   cairo_set_operator(windowCtx, CAIRO_OPERATOR_SOURCE);
   cairo_paint(windowCtx);
 
-  // Debugging
-  // cairo_reset_clip(windowCtx);
-  // cairo_set_source_rgba(windowCtx, 1.0, 0.0, 0.0, 0.5);
-  // cairo_rectangle(windowCtx, rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
-  // cairo_stroke(windowCtx);
-  //  NSLog(@"Exposing rect %@ with cairo. Status: '%s'", NSStringFromRect(rect), cairo_status_to_string(cairo_status(windowCtx)));
-
   cairo_destroy(windowCtx);
-  
-  // Restore device offset
-  cairo_surface_set_device_offset(_surface, backupOffsetX, backupOffsetY);
 }
 
 @end

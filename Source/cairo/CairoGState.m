@@ -158,7 +158,10 @@ static inline cairo_filter_t cairoFilterFromNSImageInterpolation(NSImageInterpol
       if (status != CAIRO_STATUS_SUCCESS)
         {
           NSLog(@"Cairo status '%s' in copy", cairo_status_to_string(status));
+          cairo_destroy(copy->_ct);
           copy->_ct = NULL;
+          DESTROY(copy);
+          return nil;
         }
       else
         {
