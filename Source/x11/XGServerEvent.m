@@ -1185,32 +1185,9 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
               NSDebugLLog(@"NSEvent", @"Expose frame %d %d %d %d\n",
                           rectangle.x, rectangle.y,
                           rectangle.width, rectangle.height);
-#if 0
-              // ignore backing if sub-window
               [self _addExposedRectangle: rectangle : cWin->number : isSubWindow];
-
               if (xEvent.xexpose.count == 0)
                 [self _processExposedRectangles: cWin->number];
-#else
-              {
-                NSRect rect;
-                NSTimeInterval ts = (NSTimeInterval)generic.lastMotion;
-                
-                rect = [self _XWinRectToOSWinRect: NSMakeRect(
-                        rectangle.x, rectangle.y, rectangle.width, rectangle.height)
-                             for: cWin];
-                e = [NSEvent otherEventWithType: NSAppKitDefined
-                             location: rect.origin
-                             modifierFlags: eventFlags
-                             timestamp: ts / 1000.0
-                             windowNumber: cWin->number
-                             context: gcontext
-                             subtype: GSAppKitRegionExposed
-                             data1: rect.size.width
-                             data2: rect.size.height];
-              }
-              
-#endif
             }
           break;
         }
