@@ -38,7 +38,37 @@
 #include "cairo/CairoSurface.h"
 #include "cairo/CairoContext.h"
 #include <math.h>
+#include <objc/runtime.h>
 
+/**
+ * Cache entry for pre-converted pixel format data used by DPSimage.
+ * Avoids re-doing per-pixel RGBA->ARGB conversion on every draw call
+ * for the same source image data.
+ */
+@interface _GSCairoImageCache : NSObject
+{
+  @public
+  unsigned char *cachedData;
+  NSInteger cachedWidth;
+  NSInteger cachedHeight;
+  NSInteger cachedBpp;
+  const unsigned char *sourceDataPtr;
+}
+@end
+
+@implementation _GSCairoImageCache
+- (void) dealloc
+{
+  if (cachedData)
+    {
+      free(cachedData);
+      cachedData = NULL;
+    }
+  [super dealloc];
+}
+@end
+
+static char _gsCairoImageCacheKey;
 
 // Macro stolen from base/Header/Additions/GNUstepBase/GSObjRuntime.h
 #ifndef	GS_MAX_OBJECTS_FROM_STACK
@@ -1067,84 +1097,135 @@ _set_op(cairo_t *ct, NSCompositingOperation op)
     bytesPerRow++;
 
   reformattedDataSize = pixelsWide * pixelsHigh * sizeof(*reformattedDataPixel);
+  BOOL usedCache = NO;
 
-  switch (bitsPerPixel)
-    {
-    case 32:
-      reformattedData = malloc(reformattedDataSize);
-      if (!reformattedData)
-        {
-          NSLog(@"Could not allocate drawing space for image");
-          return;
-        }
+  /* Check if we have a cached conversion for this exact source data pointer
+   * with matching dimensions and bpp.  This avoids expensive per-pixel
+   * format conversion on repeated draws of the same image. */
+  {
+    static NSMapTable *_convertCache = nil;
+    if (!_convertCache)
+      {
+        _convertCache = [[NSMapTable alloc]
+          initWithKeyOptions: NSPointerFunctionsOpaqueMemory | NSPointerFunctionsOpaquePersonality
+          valueOptions: NSPointerFunctionsStrongMemory | NSPointerFunctionsObjectPersonality
+          capacity: 64];
+      }
+    _GSCairoImageCache *cached = [_convertCache objectForKey: (id)data[0]];
+    if (cached
+        && cached->sourceDataPtr == data[0]
+        && cached->cachedWidth == pixelsWide
+        && cached->cachedHeight == pixelsHigh
+        && cached->cachedBpp == bitsPerPixel)
+      {
+        /* Cache hit: use memcpy instead of per-pixel conversion */
+        reformattedData = malloc(reformattedDataSize);
+        if (!reformattedData)
+          {
+            NSLog(@"Could not allocate drawing space for image");
+            return;
+          }
+        memcpy(reformattedData, cached->cachedData, reformattedDataSize);
+        usedCache = YES;
+        format = (bitsPerPixel == 32) ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24;
+      }
+    else
+      {
+        switch (bitsPerPixel)
+          {
+          case 32:
+            reformattedData = malloc(reformattedDataSize);
+            if (!reformattedData)
+              {
+                NSLog(@"Could not allocate drawing space for image");
+                return;
+              }
 
-      dataRow = (unsigned char *)data[0];
-      reformattedDataPixel = (uint32_t *) reformattedData;
+            dataRow = (unsigned char *)data[0];
+            reformattedDataPixel = (uint32_t *) reformattedData;
 
-      rowCounter = pixelsHigh;
+            rowCounter = pixelsHigh;
 
-      while (rowCounter--)
-        {
-          uint32_t *dataPixel = (uint32_t *) dataRow;
+            while (rowCounter--)
+              {
+                uint32_t *dataPixel = (uint32_t *) dataRow;
 
-          columnCounter = pixelsWide;
+                columnCounter = pixelsWide;
 
-          while (columnCounter--)
-            {
+                while (columnCounter--)
+                  {
 #if GS_WORDS_BIGENDIAN
-                // RGBA (uint32) -> ARGB (uint32)
-              *reformattedDataPixel++ = (*dataPixel >> 8)       // RGBA -> _RGB
-                                        | (*dataPixel << 24);   // RGBA -> A___
+                      // RGBA (uint32) -> ARGB (uint32)
+                    *reformattedDataPixel++ = (*dataPixel >> 8)       // RGBA -> _RGB
+                                              | (*dataPixel << 24);   // RGBA -> A___
 #else
-                // ABGR (uint32) -> ARGB (uint32)
-              *reformattedDataPixel++ = ((*dataPixel & 0x000000FF) << 16)   // ___R -> _R__
-                                        | ((*dataPixel & 0x00FF0000) >> 16) // _B__ -> ___B
-                                        | (*dataPixel & 0xFF00FF00);        // A_G_ -> A_G_
-#endif 
-              dataPixel++;
-            }
+                      // ABGR (uint32) -> ARGB (uint32)
+                    *reformattedDataPixel++ = ((*dataPixel & 0x000000FF) << 16)   // ___R -> _R__
+                                              | ((*dataPixel & 0x00FF0000) >> 16) // _B__ -> ___B
+                                              | (*dataPixel & 0xFF00FF00);        // A_G_ -> A_G_
+#endif
+                    dataPixel++;
+                  }
 
-          dataRow += bytesPerRow;
-        }
-      format = CAIRO_FORMAT_ARGB32;
-      break;
-    case 24:
-      reformattedData = malloc(reformattedDataSize);
-      if (!reformattedData)
+                dataRow += bytesPerRow;
+              }
+            format = CAIRO_FORMAT_ARGB32;
+            break;
+          case 24:
+            reformattedData = malloc(reformattedDataSize);
+            if (!reformattedData)
+              {
+                NSLog(@"Could not allocate drawing space for image");
+                return;
+              }
+
+            dataRow = (unsigned char *)data[0];
+            reformattedDataPixel = (uint32_t *) reformattedData;
+
+            rowCounter = pixelsHigh;
+
+            while (rowCounter--)
+              {
+                unsigned char *dataPixelComponent = dataRow;
+
+                columnCounter = pixelsWide;
+
+                while (columnCounter--)
+                  {
+                      // R,G,B (uchar[0-2]) -> _RGB (uint32)
+                    *reformattedDataPixel++ = (((uint32_t) dataPixelComponent[0]) << 16)  // R -> _R__
+                                              | (((uint32_t) dataPixelComponent[1]) << 8) // G -> __G_
+                                              | ((uint32_t) dataPixelComponent[2]);       // B -> ___B
+
+                    dataPixelComponent += 3;
+                  }
+
+                dataRow += bytesPerRow;
+              }
+            format = CAIRO_FORMAT_RGB24;
+            break;
+          default:
+            NSLog(@"Image format not support");
+            return;
+          }
+
+        /* Store the conversion result in the cache for future draws */
         {
-          NSLog(@"Could not allocate drawing space for image");
-          return;
-        }
-
-      dataRow = (unsigned char *)data[0];
-      reformattedDataPixel = (uint32_t *) reformattedData;
-
-      rowCounter = pixelsHigh;
-
-      while (rowCounter--)
-        {
-          unsigned char *dataPixelComponent = dataRow;
-
-          columnCounter = pixelsWide;
-
-          while (columnCounter--)
+          _GSCairoImageCache *entry = [_GSCairoImageCache new];
+          entry->cachedData = malloc(reformattedDataSize);
+          if (entry->cachedData)
             {
-                // R,G,B (uchar[0-2]) -> _RGB (uint32)
-              *reformattedDataPixel++ = (((uint32_t) dataPixelComponent[0]) << 16)  // R -> _R__
-                                        | (((uint32_t) dataPixelComponent[1]) << 8) // G -> __G_
-                                        | ((uint32_t) dataPixelComponent[2]);       // B -> ___B
-
-              dataPixelComponent += 3;
+              memcpy(entry->cachedData, reformattedData, reformattedDataSize);
+              entry->cachedWidth = pixelsWide;
+              entry->cachedHeight = pixelsHigh;
+              entry->cachedBpp = bitsPerPixel;
+              entry->sourceDataPtr = data[0];
+              [_convertCache setObject: entry forKey: (id)data[0]];
             }
-
-          dataRow += bytesPerRow;
+          RELEASE(entry);
         }
-      format = CAIRO_FORMAT_RGB24;
-      break;
-    default:
-      NSLog(@"Image format not support");
-      return;
-    }
+      }
+  }
 
   surface = cairo_image_surface_create_for_data((void*)reformattedData,
 						format,
