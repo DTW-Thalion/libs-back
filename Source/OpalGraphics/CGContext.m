@@ -353,6 +353,12 @@ void CGContextRestoreGState(CGContextRef ctx)
 
   if (!ctx->add) return;
 
+  if (!ctx->add->next)
+    {
+      NSLog(@"%s(%p): GState restore underflow — no saved state to restore", __FUNCTION__, ctx);
+      return;
+    }
+
   CGColorRelease(ctx->add->fill_color);
   cairo_pattern_destroy(ctx->add->fill_cp);
   CGColorRelease(ctx->add->stroke_color);
@@ -360,11 +366,6 @@ void CGContextRestoreGState(CGContextRef ctx)
   ctadd = ctx->add->next;
   free(ctx->add);
   ctx->add = ctadd;
-
-  if(!ctx->add)
-    {
-      NSLog(@"%s(%p): restoring produced null 'ct_additions'", __FUNCTION__, ctx);
-    }
 
   cairo_restore(ctx->ct);
 }
@@ -813,13 +814,14 @@ static void fill_path(CGContextRef ctx, int eorule, int preserve)
 {
   cairo_status_t cret;
   
-  if(!ctx || !ctx->add)
+  if (!ctx)
     {
-      NSLog(@"null %s%s%s in %s",
-            !ctx ? "ctx" : "",
-            (!ctx && !ctx->add) ? " and " : "", 
-            !ctx->add ? "ctx->add" : "",
-            __PRETTY_FUNCTION__);
+      NSLog(@"null ctx in %s", __PRETTY_FUNCTION__);
+      return;
+    }
+  if (!ctx->add)
+    {
+      NSLog(@"null ctx->add in %s", __PRETTY_FUNCTION__);
       return;
     }
 

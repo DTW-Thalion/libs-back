@@ -25,6 +25,7 @@
 #import <Foundation/NSObject.h>
 #include "CoreGraphics/CGPath.h"
 
+#include <math.h>
 #import "OPPath.h"
 
 typedef struct
@@ -699,6 +700,9 @@ void CGPathAddCurveToPoint(
   CGFloat x,
   CGFloat y)
 {
+  if (isnan(cx1) || isnan(cy1) || isnan(cx2) || isnan(cy2) ||
+      isnan(x) || isnan(y) || isinf(cx1) || isinf(cy1) ||
+      isinf(cx2) || isinf(cy2) || isinf(x) || isinf(y)) return;
   CGPoint points[3];
   points[0] = CGPointMake(cx1, cy1);
   points[1] = CGPointMake(cx2, cy2);
@@ -734,6 +738,7 @@ void CGPathAddLineToPoint (
   CGFloat x,
   CGFloat y)
 {
+  if (isnan(x) || isnan(y) || isinf(x) || isinf(y)) return;
   CGPoint point = CGPointMake(x, y);
   if (m)
   {
@@ -773,6 +778,8 @@ void CGPathAddQuadCurveToPoint(
   CGFloat x,
   CGFloat y)
 {
+  if (isnan(cx) || isnan(cy) || isnan(x) || isnan(y) ||
+      isinf(cx) || isinf(cy) || isinf(x) || isinf(y)) return;
   CGPoint points[2] = {
     CGPointMake(cx, cy),
     CGPointMake(x, y)
@@ -833,6 +840,7 @@ void CGPathMoveToPoint(
   CGFloat x,
   CGFloat y)
 {
+  if (isnan(x) || isnan(y) || isinf(x) || isinf(y)) return;
   CGPoint point = CGPointMake(x, y);
   if (m)
   {

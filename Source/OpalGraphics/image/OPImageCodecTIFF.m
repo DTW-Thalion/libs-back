@@ -82,6 +82,11 @@ extern void DumpPixel(const void *data, NSString *msg);
 }
 - (size_t) read: (unsigned char *)buf count: (size_t)count
 {
+  size_t available = [data length];
+  if (pos < 0 || (size_t)pos >= available)
+    return 0;
+  if ((size_t)pos + count > available)
+    count = available - (size_t)pos;
   [data getBytes: buf range: NSMakeRange(pos, count)];
   pos += count;
   return count;
@@ -334,7 +339,7 @@ static void OPTIFFUnmapProc(thandle_t handle, tdata_t data, toff_t size)
 {
   self = [super init];
   
-  if ([type isEqualToString: @"public.tiff"] || count != 1)
+  if (![type isEqualToString: @"public.tiff"] || count != 1)
   {
     [self release];
     return nil;

@@ -388,15 +388,16 @@ static void gs_jpeg_memory_dest_destroy (j_compress_ptr cinfo)
   if (!(self = [super init]))
     return NULL;
 
+  unsigned char *imgbuffer = NULL;
+
   memset((void*)&cinfo, 0, sizeof(struct jpeg_decompress_struct));
   gs_jpeg_error_mgr_create((j_common_ptr)&cinfo, &jerrMgr);
-  
+
   NS_DURING
   {
     /* jpeg-decompression */
     JDIMENSION sclcount, i, j;
     JSAMPARRAY sclbuffer = NULL;
-    unsigned char *imgbuffer = NULL;
     BOOL isProgressive;
   
     jpeg_create_decompress(&cinfo);
@@ -478,6 +479,8 @@ static void gs_jpeg_memory_dest_destroy (j_compress_ptr cinfo)
   } 
   NS_HANDLER
   {
+    free(imgbuffer);
+    imgbuffer = NULL;
     gs_jpeg_memory_src_destroy(&cinfo);
     jpeg_destroy_decompress(&cinfo);
     NS_VALUERETURN(NULL, CGImageRef);
