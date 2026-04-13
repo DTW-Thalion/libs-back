@@ -1145,9 +1145,12 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
               generic.cachedWindow
                 = [XGServer _windowForXWindow:xEvent.xexpose.window];
             }
-          // sub-window ?
-	  /*
+          /* sub-window? The historical XQueryTree walk below is commented
+           * out — it had no termination guarantee and was never re-enabled.
+           * We default to NO; if sub-window backing routing is ever needed,
+           * reinstate the walk with a bounded loop. */
           BOOL isSubWindow = NO;
+	  /*
 
             {
               Window xw;
