@@ -1031,6 +1031,41 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
         }
     }
 
+  /* When the WM did not support _NET_REQUEST_FRAME_EXTENTS we may have
+   * broken out of the wait loop above as soon as we saw the
+   * ReparentNotify, before the WM had a chance to set
+   * _NET_FRAME_EXTENTS.  If the WM is EWMH, give it a brief bounded
+   * window to publish the property so that -_getExtents returns real
+   * frame extents instead of falling through to the (less accurate)
+   * reparent-derived offsets below.
+   */
+  if ((generic.wm & XGWM_EWMH) != 0)
+    {
+      XID    fe_event_data[2];
+      NSDate *fe_limit;
+
+      fe_event_data[0] = window->ident;
+      fe_event_data[1] = generic._NET_FRAME_EXTENTS_ATOM;
+
+      fe_limit = [NSDate dateWithTimeIntervalSinceNow: 0.25];
+      while ([fe_limit timeIntervalSinceNow] > 0.0)
+        {
+          XEvent fe_event;
+
+          if (XCheckIfEvent(dpy, &fe_event, _get_next_prop_new_event,
+                            (char*)(&fe_event_data)))
+            {
+              break;
+            }
+          {
+            CREATE_AUTORELEASE_POOL(fe_pool);
+            [NSThread sleepUntilDate:
+                        [NSDate dateWithTimeIntervalSinceNow: 0.005]];
+            IF_NO_GC([fe_pool release]);
+          }
+        }
+    }
+
   extents = [self _getExtents: window->ident];
   if (extents != 0)
     {
