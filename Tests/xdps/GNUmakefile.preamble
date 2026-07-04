@@ -1,0 +1,7 @@
+# Extra build settings for the xdps tests.
+#
+# parseAFM.c is plain C with no backend dependency, so this test compiles the
+# source in directly and needs no per-backend guard.  Add the Source tree so
+# xdps/parseAFM.c (and its parseAFM.h) resolve.
+ADDITIONAL_INCLUDE_DIRS += -I$(GNUSTEP_BUILD_DIR)/../../Source \
+                           -I../../Source
