@@ -14,6 +14,7 @@
   && BUILD_GRAPHICS == GRAPHICS_cairo
 
 #import <AppKit/AppKit.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #include <stdlib.h>
 
 int
@@ -24,12 +25,24 @@ main(int argc, const char **argv)
 
   START_SET("bitmap context flush")
 
-  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
+  /* Ask whether a display server can be reached rather than whether X11's
+   * DISPLAY is set: a backend that is not X11 has no DISPLAY and would skip
+   * here while being perfectly able to run the test.  The handler matters as
+   * much as the question: starting the application raises when no backend can
+   * be loaded, and an unguarded call fails the set instead of skipping it. */
+  NS_DURING
     {
-      SKIP("no window server available")
+      [NSApplication sharedApplication];
+      if (nil == GSCurrentServer())
+	{
+	  SKIP("no window server available")
+	}
     }
-
-  [NSApplication sharedApplication];
+  NS_HANDLER
+    {
+      SKIP("It looks like the GNUstep backend is not installed")
+    }
+  NS_ENDHANDLER
 
   rep = AUTORELEASE([[NSBitmapImageRep alloc]
     initWithBitmapDataPlanes: NULL
