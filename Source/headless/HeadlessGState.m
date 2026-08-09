@@ -28,7 +28,42 @@
 
 @implementation HeadlessGState
 
+- (id) copyWithZone: (NSZone *)zone
+{
+  HeadlessGState *copy = (HeadlessGState *)[super copyWithZone: zone];
+
+  copy->_linecap = _linecap;
+  copy->_linejoin = _linejoin;
+  copy->_strokeadjust = _strokeadjust;
+  copy->_linewidth = _linewidth;
+  copy->_miterlimit = _miterlimit;
+  return copy;
+}
+
+- (id) initWithDrawContext: (GSContext *)drawContext
+{
+  self = [super initWithDrawContext: drawContext];
+  if (self != nil)
+    {
+      /* The PostScript defaults, so a read before any write is not zero. */
+      _linecap = 0;
+      _linejoin = 0;
+      _strokeadjust = 0;
+      _linewidth = 1.0;
+      _miterlimit = 10.0;
+    }
+  return self;
+}
+
 - (void) DPSclip
+{
+}
+
+- (void) DPSeoclip
+{
+}
+
+- (void) DPSinitclip
 {
 }
 
@@ -36,8 +71,100 @@
 {
 }
 
+- (void) DPSeofill
+{
+}
+
+- (void) _paintPath: (ctxt_object_t)drawType
+{
+}
+
+- (void *) saveClip
+{
+  return NULL;
+}
+
+- (void) restoreClip: (void *)savedClip
+{
+}
+
+- (void) DPSshow: (const char *)s
+{
+}
+
+- (void) GSShowText: (const char *)string : (size_t)length
+{
+}
+
+- (void) GSShowGlyphsWithAdvances: (const NSGlyph *)glyphs
+                                 : (const NSSize *)advances
+                                 : (size_t)length
+{
+}
+
 - (void) DPSsetlinewidth: (CGFloat)width
 {
+  _linewidth = width;
+}
+
+- (void) DPScurrentlinewidth: (CGFloat *)width
+{
+  if (width != NULL)
+    {
+      *width = _linewidth;
+    }
+}
+
+- (void) DPSsetlinecap: (int)linecap
+{
+  _linecap = linecap;
+}
+
+- (void) DPScurrentlinecap: (int *)linecap
+{
+  if (linecap != NULL)
+    {
+      *linecap = _linecap;
+    }
+}
+
+- (void) DPSsetlinejoin: (int)linejoin
+{
+  _linejoin = linejoin;
+}
+
+- (void) DPScurrentlinejoin: (int *)linejoin
+{
+  if (linejoin != NULL)
+    {
+      *linejoin = _linejoin;
+    }
+}
+
+- (void) DPSsetmiterlimit: (CGFloat)limit
+{
+  _miterlimit = limit;
+}
+
+- (void) DPScurrentmiterlimit: (CGFloat *)limit
+{
+  if (limit != NULL)
+    {
+      *limit = _miterlimit;
+    }
+}
+
+- (void) DPSsetstrokeadjust: (int)b
+{
+  _strokeadjust = b;
+}
+
+- (void) DPScurrentstrokeadjust: (int *)b
+{
+  if (b != NULL)
+    {
+      *b = _strokeadjust;
+    }
 }
 
 - (void) DPSsetdash: (const CGFloat *)pat : (NSInteger)size : (CGFloat)foffset
