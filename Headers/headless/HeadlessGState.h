@@ -31,6 +31,14 @@
 
 @interface HeadlessGState : GSGState
 {
+  /* Held so the DPScurrent... accessors answer what was set.  Nothing is
+     drawn, but a caller that sets a parameter and reads it back gets its own
+     value rather than an exception.  Initialised to the PostScript defaults. */
+  int _linecap;
+  int _linejoin;
+  int _strokeadjust;
+  CGFloat _linewidth;
+  CGFloat _miterlimit;
 }
 @end
 
