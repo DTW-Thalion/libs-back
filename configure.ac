@@ -589,8 +589,8 @@ case $target_os in
               BUILD_GRAPHICS=winlib;;
 esac
 
-AC_ARG_ENABLE(server, 
-  [  --enable-server=SRV     Build server type: x11, win32, wayland, headless],,
+AC_ARG_ENABLE(server,
+  [  --enable-server=SRV     Build server type: x11, win32, wayland, android, headless],,
   enable_server=$BUILD_SERVER)
 AC_ARG_ENABLE(graphics, 
   [  --enable-graphics=GPH   Build graphics: xlib, xdps, winlib, art, cairo, opal, headless],,
@@ -611,6 +611,8 @@ if test x"$BUILD_GRAPHICS" = "xcairo"; then
       BUILD_GRAPHICS=winlib
     elif test $BUILD_SERVER = wayland; then
       AC_MSG_ERROR([wayland backend requires cairo])
+    elif test $BUILD_SERVER = android; then
+      AC_MSG_ERROR([android backend requires cairo])
     else
       BUILD_GRAPHICS=xlib
     fi
@@ -621,6 +623,8 @@ if test x"$BUILD_GRAPHICS" = "xcairo"; then
       BUILD_GRAPHICS=winlib
     elif test $BUILD_SERVER = wayland; then
       AC_MSG_ERROR([wayland backend requires cairo])
+    elif test $BUILD_SERVER = android; then
+      AC_MSG_ERROR([android backend requires cairo])
     else
       BUILD_GRAPHICS=art
     fi
@@ -692,6 +696,11 @@ if test x"$BUILD_GRAPHICS" = "xcairo"; then
         AC_DEFINE(HAVE_EGL, 1, [Define if EGL is available for Wayland OpenGL support])
         LIBS="-lGL -lEGL -lwayland-egl $LIBS"
       fi
+    elif test $BUILD_SERVER = android; then
+      dnl The android surface draws into a cairo image surface, so nothing from
+      dnl the NDK is linked.  A surface backed by ANativeWindow adds
+      dnl -landroid -lnativewindow here.
+      AC_MSG_RESULT(android)
     fi
 AC_SUBST(WITH_EGL)
     LIBS="$CAIRO_LIBS $LIBS"
@@ -800,6 +809,7 @@ AH_TOP([
 #define SERVER_win32      2
 #define SERVER_wayland    3
 #define SERVER_headless   4
+#define SERVER_android    5
 #define GRAPHICS_xdps     0
 #define GRAPHICS_art      1
 #define GRAPHICS_xlib     2

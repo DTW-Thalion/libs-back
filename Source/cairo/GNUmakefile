@@ -67,6 +67,10 @@ ifeq ($(BUILD_SERVER),wayland)
   cairo_OBJC_FILES += WaylandCairoShmSurface.m
 endif
 
+ifeq ($(BUILD_SERVER),android)
+  cairo_OBJC_FILES += AndroidCairoSurface.m
+endif
+
 ifeq ($(BUILD_SERVER),win32)
   ifeq ($(WITH_GLITZ),yes)
     cairo_OBJC_FILES += Win32CairoGlitzSurface.m
