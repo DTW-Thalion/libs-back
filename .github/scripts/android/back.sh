@@ -164,7 +164,9 @@ done
 
 say "libs-back build and install"
 make -j"$JOBS" > "$GS_BACK/android-build.log" 2>&1 || {
-  echo "build failed"; grep -E "error:" "$GS_BACK/android-build.log" | head -20; exit 1; }
+  echo "build failed"; grep -E "error:" "$GS_BACK/android-build.log" | head -20
+  echo "--- last 25 lines of the build log"
+  tail -25 "$GS_BACK/android-build.log"; exit 1; }
 make install > "$GS_BACK/android-install.log" 2>&1 || {
   echo "install failed"; tail -25 "$GS_BACK/android-install.log"; exit 1; }
 BUNDLE=$(find "$GSROOT" -maxdepth 6 -name 'libgnustep-back*.bundle' | head -1)
