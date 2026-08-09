@@ -44,37 +44,77 @@ def alias_element(name, target, indent="  "):
     )
 
 
-def postscript_name(psname, filename, indent="  "):
-    """Give a file the PostScript name AppKit will ask for.
+# fontconfig's weight and slant scales are not OpenType's, and a scan match can
+# only name a const.  These are the values fontconfig's scanner assigns, so a
+# match keyed on them selects exactly one named instance of a variable font.
+FC_WEIGHT = {
+    "100": "thin", "200": "extralight", "300": "light", "400": "regular",
+    "500": "medium", "600": "demibold", "700": "bold", "800": "extrabold",
+    "900": "black",
+}
+FC_SLANT = {"normal": "roman", "italic": "italic"}
 
-    FCFontEnumerator names a FACE from FC_POSTSCRIPT_NAME when the font has one
-    (FCFontEnumerator.m:320), falling back to family plus style.  -availableFonts
-    is built from those face names, and NSFont looks its default up there by
-    name, so prepending a family is not enough: without this the family shows in
-    -availableFontFamilies, NSFont still finds no font, and the typesetter
-    raises "Glyph generation with no font".
+# FC_WIDTH_NORMAL.  It is written as an integer rather than <const>normal</const>
+# because fontconfig's constant table is keyed by NAME alone: "normal" is also
+# the name of a weight, resolves to FC_WEIGHT_NORMAL (80), and a width test
+# against it matches nothing at all.  Measured on fontconfig 2.15: the const
+# form silently never fires, the integer form does.
+FC_WIDTH_NORMAL = 100
+
+
+def face_match(psname, families, filename, weight, style, width, indent="  "):
+    """Name one FACE: its PostScript name, and the families it belongs to.
+
+    The match cannot be keyed on the file alone.  Android's sans-serif keeps
+    weight 400 in RobotoStatic-Regular.ttf and every other weight and slant in
+    named instances of the ONE variable file Roboto-Regular.ttf, and a scan
+    match that tests only the file fires for all 37 of them -- so every
+    instance is given the same PostScript name, of which FCFontEnumerator keeps
+    the first it meets, and the face called Helvetica-Bold ends up being the
+    regular weight.  weight, slant and width are what tell the instances apart;
+    width has to be tested too, or the Condensed instances are named as well.
+
+    FCFontEnumerator names a FACE from FC_POSTSCRIPT_NAME (FCFontEnumerator.m:320)
+    and takes its FAMILY from element 0 of FC_FAMILY (FCFontEnumerator.m:371),
+    which is what a prepend supplies.  -availableFonts is built from the face
+    names and NSFont looks its defaults up there by name, so the name has to
+    reach the right face; the family has to be the AppKit family, or asking
+    fontconfig for that family's bold face finds nothing and falls back to the
+    regular one.
     """
-    return (
-        '{i}<match target="scan">\n'
-        '{i}  <test name="file" compare="eq"><string>{f}</string></test>\n'
-        '{i}  <edit name="postscriptname" mode="assign"><string>{n}</string></edit>\n'
-        '{i}</match>\n'.format(i=indent, f=escape(filename), n=escape(psname))
-    )
+    out = ['{i}<match target="scan">\n'
+           '{i}  <test name="file" compare="eq"><string>{f}</string></test>\n'
+           '{i}  <test name="weight" compare="eq"><const>{w}</const></test>\n'
+           '{i}  <test name="slant" compare="eq"><const>{s}</const></test>\n'
+           '{i}  <test name="width" compare="eq"><int>{d}</int></test>\n'
+           .format(i=indent, f=escape(filename), d=width,
+                   w=FC_WEIGHT[weight], s=FC_SLANT[style])]
+    if psname is not None:
+        out.append('{i}  <edit name="postscriptname" mode="assign">'
+                   '<string>{n}</string></edit>\n'
+                   .format(i=indent, n=escape(psname)))
+    for fam in families:
+        out.append('{i}  <edit name="family" mode="prepend">'
+                   '<string>{n}</string></edit>\n'
+                   .format(i=indent, n=escape(fam)))
+    out.append('{i}</match>\n'.format(i=indent))
+    return "".join(out)
 
 
-def family_default(family, filename, indent="  "):
-    """Bind a family name to the file fonts.xml names first for it.
+def face_width(font):
+    """The fontconfig width of a fonts.xml <font>, from its wdth axis.
 
-    Without this the family name reaches fontconfig only through the file's own
-    internal name, so a request for "sans-serif" matches nothing and fontconfig
-    falls back to whatever sorts first -- which on this device is a bold face.
+    A named instance of a variable font carries the axis value as its width;
+    everything else is normal.  Testing the wrong width means the match never
+    fires and the face silently keeps its own name.
     """
-    return (
-        '{i}<match target="scan">\n'
-        '{i}  <test name="file" compare="eq"><string>{f}</string></test>\n'
-        '{i}  <edit name="family" mode="prepend"><string>{n}</string></edit>\n'
-        '{i}</match>\n'.format(i=indent, f=escape(filename), n=escape(family))
-    )
+    for a in font.findall("axis"):
+        if a.get("tag") == "wdth":
+            try:
+                return int(float(a.get("stylevalue")))
+            except (TypeError, ValueError):
+                return FC_WIDTH_NORMAL
+    return FC_WIDTH_NORMAL
 
 
 # The PostScript names AppKit asks for by default, and the Android family and
@@ -83,55 +123,60 @@ def family_default(family, filename, indent="  "):
 # family up BY NAME in the enumerator's list -- an alias is not enough, because
 # no font file on the device carries any of these names.
 #
-# (postscript name, android family, weight, style)
+# The AppKit family is carried as well as the PostScript name: the three roles
+# of a family have to sit in ONE family, or -defaultBoldSystemFontName, which
+# asks fontconfig for the bold face of the system font's family, finds only the
+# regular face and answers the system name back.
+#
+# (postscript name, AppKit family, android family, weight, style)
 APPKIT_NAMES = [
-    ("Helvetica",          "sans-serif", "400", "normal"),
-    ("Helvetica-Bold",     "sans-serif", "700", "normal"),
-    ("Helvetica-Oblique",  "sans-serif", "400", "italic"),
-    ("Times-Roman",        "serif",      "400", "normal"),
-    ("Times-Bold",         "serif",      "700", "normal"),
-    ("Times-Italic",       "serif",      "400", "italic"),
-    ("Courier",            "monospace",  "400", "normal"),
-    ("Courier-Bold",       "monospace",  "700", "normal"),
+    ("Helvetica",          "Helvetica", "sans-serif", "400", "normal"),
+    ("Helvetica-Bold",     "Helvetica", "sans-serif", "700", "normal"),
+    ("Helvetica-Oblique",  "Helvetica", "sans-serif", "400", "italic"),
+    ("Times-Roman",        "Times",     "serif",      "400", "normal"),
+    ("Times-Bold",         "Times",     "serif",      "700", "normal"),
+    ("Times-Italic",       "Times",     "serif",      "400", "italic"),
+    ("Courier",            "Courier",   "monospace",  "400", "normal"),
+    ("Courier-Bold",       "Courier",   "monospace",  "700", "normal"),
 ]
 
 
-def font_for(family, weight, style):
-    """The file for a family's (weight, style) face, falling back to 400 normal.
+def faces_of(family, fontdir):
+    """Every face fonts.xml declares for a family, as (path, weight, style,
+    width) in declaration order.  Faces whose weight or style this script
+    cannot express as a fontconfig constant are dropped and reported, never
+    written out with a guessed value."""
+    out = []
+    skipped = []
+    for f in family.findall("font"):
+        name = (f.text or "").strip()
+        if not name:
+            continue
+        fw = f.get("weight")
+        fs = f.get("style", "normal")
+        if fw not in FC_WEIGHT or fs not in FC_SLANT:
+            skipped.append("%s %s/%s" % (name, fw, fs))
+            continue
+        out.append(("%s/%s" % (fontdir, name), fw, fs, face_width(f)))
+    return out, skipped
 
-    Returns (filename, exact) where exact says whether the requested face was
-    found or the regular one was substituted.
+
+def font_for(faces, weight, style):
+    """The face for a (weight, style), falling back to the regular one.
+
+    Returns (face, exact).  The face returned is the one that actually exists,
+    which is what a scan match has to test: asking for the 700 face of a family
+    that has none and then testing for weight 700 would match nothing at all.
     """
     fallback = None
-    for f in family.findall("font"):
-        name = (f.text or "").strip()
-        if not name:
-            continue
-        if f.get("weight") == weight and f.get("style", "normal") == style:
-            return name, True
-        if f.get("weight") == "400" and f.get("style", "normal") == "normal" \
+    for face in faces:
+        _, fw, fs, fd = face
+        if fw == weight and fs == style and fd == FC_WIDTH_NORMAL:
+            return face, True
+        if fw == "400" and fs == "normal" and fd == FC_WIDTH_NORMAL \
                 and fallback is None:
-            fallback = name
+            fallback = face
     return fallback, False
-
-
-def first_regular_font(family):
-    """The file for the family's regular, upright face, or None.
-
-    fonts.xml lists a <font> per weight and style; weight 400 style normal is
-    the regular face.  Falls back to the first font element when the family
-    declares no 400/normal.
-    """
-    first = None
-    for f in family.findall("font"):
-        name = (f.text or "").strip()
-        if not name:
-            continue
-        if first is None:
-            first = name
-        if f.get("weight") == "400" and f.get("style", "normal") == "normal":
-            return name
-    return first
 
 
 def main():
@@ -160,47 +205,78 @@ def main():
 
     out = [HEADER.format(fontdir=escape(fontdir), cachedir=escape(cachedir))]
 
-    out.append("  <!-- %d named families from fonts.xml, bound to their "
-               "regular face -->\n" % len(named))
-    bound = 0
-    for fam in named:
-        regular = first_regular_font(fam)
-        if regular:
-            out.append(family_default(fam.get("name"), "%s/%s" % (fontdir, regular)))
-            bound += 1
-
-    # The names AppKit asks for by default, bound onto real faces.
-    byname = dict((f.get("name"), f) for f in named)
-    out.append("  <!-- the PostScript names AppKit asks for -->\n")
-    appkit = 0
+    # Everything is written per FACE -- (file, weight, style, width) -- not per
+    # file.  Android's sans-serif keeps weight 400 in RobotoStatic-Regular.ttf
+    # and every other weight and slant in named instances of the ONE variable
+    # file Roboto-Regular.ttf, so a rule keyed on the file alone applies to all
+    # 37 of them at once.
+    faces = {}            # (path, weight, style, width) -> {ps, families}
+    order = []
     inexact = []
     unnamed = []
-    claimed = {}          # file -> the PostScript name already assigned to it
-    for ps, fam, weight, style in APPKIT_NAMES:
-        family = byname.get(fam)
-        if family is None:
-            continue
-        file, exact = font_for(family, weight, style)
-        if file is None:
-            continue
-        path = "%s/%s" % (fontdir, file)
+    dropped = []
 
-        # The family list is multi-valued, so every name can be prepended.
-        out.append(family_default(ps, path))
+    def face_entry(key):
+        if key not in faces:
+            faces[key] = {"ps": None, "families": []}
+            order.append(key)
+        return faces[key]
+
+    # A family name has to reach EVERY face fonts.xml declares for it, not just
+    # the regular one.  fontconfig scores the family before the weight, so a
+    # family carried by the regular face alone answers that face for a bold
+    # request -- which is how -defaultBoldSystemFontName came back with the
+    # system font's own name.
+    out.append("  <!-- the families fonts.xml names, over all their faces -->\n")
+    byfaces = {}
+    bound = 0
+    for fam in named:
+        fl, skipped = faces_of(fam, fontdir)
+        byfaces[fam.get("name")] = fl
+        dropped.extend(skipped)
+        for face in fl:
+            e = face_entry(face)
+            if fam.get("name") not in e["families"]:
+                e["families"].append(fam.get("name"))
+        if fl:
+            bound += 1
+
+    # The names AppKit asks for by default, bound onto real faces.  These are
+    # appended last so that the AppKit family, not the Android one, ends up as
+    # element 0 of the family list: prepends are emitted in order and the last
+    # one wins, and FCFontEnumerator takes the family from element 0.
+    appkit = 0
+    for ps, appfam, fam, weight, style in APPKIT_NAMES:
+        fl = byfaces.get(fam)
+        if not fl:
+            continue
+        face, exact = font_for(fl, weight, style)
+        if face is None:
+            continue
+        e = face_entry(face)
         appkit += 1
 
-        # A file has exactly ONE PostScript name, so the first claimant keeps
+        # A face has exactly ONE PostScript name, so the first claimant keeps
         # it.  Letting a later one overwrite would silently take the name away
         # from the earlier, more important role.
-        if path in claimed:
-            unnamed.append("%s (%s already carries the name %s)"
-                           % (ps, file, claimed[path]))
+        if e["ps"] is None:
+            e["ps"] = ps
         else:
-            claimed[path] = ps
-            out.append(postscript_name(ps, path))
+            unnamed.append("%s (%s %s/%s already carries the name %s)"
+                           % (ps, face[0].rsplit("/", 1)[-1], face[1], face[2],
+                              e["ps"]))
+
+        # The family list is multi-valued, so every name can be prepended.
+        if appfam not in e["families"]:
+            e["families"].append(appfam)
 
         if not exact:
             inexact.append("%s (no %s/%s face in %s)" % (ps, weight, style, fam))
+
+    for key in order:
+        path, fw, fs, fd = key
+        e = faces[key]
+        out.append(face_match(e["ps"], e["families"], path, fw, fs, fd))
 
     out.append("  <!-- %d aliases from fonts.xml -->\n" % len(aliases))
     for name, to in aliases:
@@ -219,10 +295,10 @@ def main():
     with open(dst, "w") as fh:
         fh.write("".join(out))
 
-    sys.stderr.write("%s: %d named families (%d bound to a regular face), "
+    sys.stderr.write("%s: %d named families (%d with faces, %d faces in all), "
                      "%d AppKit names, %d aliases, %d generic fallbacks -> %s\n"
-                     % (src, len(named), bound, appkit, len(aliases),
-                        len(missing), dst))
+                     % (src, len(named), bound, len(order), appkit,
+                        len(aliases), len(missing), dst))
     # Substitutions are reported rather than hidden: a name bound to the
     # regular face when a bold one was asked for will render at the wrong
     # weight, and that is a real limitation of the device's font set.
@@ -230,6 +306,9 @@ def main():
         sys.stderr.write("  substituted the regular face for %s\n" % line)
     for line in unnamed:
         sys.stderr.write("  no PostScript name for %s\n" % line)
+    for line in dropped:
+        sys.stderr.write("  no fontconfig constant for %s; face left alone\n"
+                         % line)
     return 0
 
 
