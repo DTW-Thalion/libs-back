@@ -193,16 +193,21 @@ sizeFromString(NSString *s)
   return NSBestDepth(NSCalibratedRGBColorSpace, 8, 24, NO, NULL);
 }
 
+/* The caller owns the returned list and frees it with NSZoneFree, which is what
+ * the x11 server does, so this must be allocated and not static: freeing a
+ * static array aborts the process with "Scudo ERROR: misaligned pointer when
+ * deallocating" on Android. */
 - (const NSWindowDepth *) availableDepthsForScreen: (int)screen
 {
-  static NSWindowDepth depths[2] = { 0, 0 };
+  NSWindowDepth *depths;
 
   if (screen != 0)
     {
       return NULL;
     }
+  depths = NSZoneMalloc(NSDefaultMallocZone(), sizeof(NSWindowDepth) * 2);
   depths[0] = NSBestDepth(NSCalibratedRGBColorSpace, 8, 24, NO, NULL);
-  depths[1] = 0;
+  depths[1] = 0;   /* zero-terminated */
   return depths;
 }
 
@@ -229,6 +234,18 @@ sizeFromString(NSString *s)
 	      : (int)screen
 {
   struct AndroidWindow *window;
+
+  /* A window always has an extent.  X refuses a zero-area window and clamps,
+   * and the rest of the gui library assumes a window it created can be drawn
+   * into; a 0x0 frame would also leave the cairo surface unmade. */
+  if (frame.size.width < 1.0)
+    {
+      frame.size.width = 1.0;
+    }
+  if (frame.size.height < 1.0)
+    {
+      frame.size.height = 1.0;
+    }
 
   window = (struct AndroidWindow *)
     NSZoneCalloc(NSDefaultMallocZone(), 1, sizeof(struct AndroidWindow));
