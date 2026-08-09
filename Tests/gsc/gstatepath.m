@@ -18,6 +18,7 @@
   && BUILD_GRAPHICS == GRAPHICS_cairo
 
 #import <AppKit/AppKit.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #include <stdlib.h>
 
 @interface NSObject (GSGStatePath)
@@ -68,14 +69,16 @@ main(int argc, const char **argv)
   START_SET("GSGState path")
   id ctxt, gs;
 
-  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
-    {
-      SKIP("no window server available")
-    }
-
+  /* Ask whether a display server can be reached rather than whether X11's
+   * DISPLAY is set: a backend that is not X11 has no DISPLAY and would skip
+   * here while being perfectly able to run the test. */
   NS_DURING
     {
       [NSApplication sharedApplication];
+      if (nil == GSCurrentServer())
+	{
+	  SKIP("no window server available")
+	}
     }
   NS_HANDLER
     {

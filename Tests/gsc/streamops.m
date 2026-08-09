@@ -18,6 +18,7 @@
   && BUILD_GRAPHICS == GRAPHICS_cairo
 
 #import <AppKit/AppKit.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #include <stdlib.h>
 
 @interface NSObject (GSStreamContextOps)
@@ -105,14 +106,16 @@ main(int argc, const char **argv)
   CGFloat m[6] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
   NSAffineTransform *ctm = [NSAffineTransform transform];
 
-  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
-    {
-      SKIP("no window server available")
-    }
-
+  /* Ask whether a display server can be reached rather than whether X11's
+   * DISPLAY is set: a backend that is not X11 has no DISPLAY and would skip
+   * here while being perfectly able to run the test. */
   NS_DURING
     {
       [NSApplication sharedApplication];
+      if (nil == GSCurrentServer())
+	{
+	  SKIP("no window server available")
+	}
     }
   NS_HANDLER
     {
