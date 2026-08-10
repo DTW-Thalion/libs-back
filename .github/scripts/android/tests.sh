@@ -60,11 +60,16 @@ echo "  base headers: $BASEINC"
 INC="-I$GS_BACK/Headers -I$GS_BACK/Source -I$TF -I$GS_PREFIX/include \
  -I$BASEINC -I$GS_DISPATCH_PREFIX/include \
  -I$GS_BACK/Tests $(pkg-config --cflags cairo)"
+# libandroid goes on every test: the tests that compile the android surface
+# source in reach ANativeWindow_lock and its neighbours through it.  libmediandk
+# is what hands out a window to post into without an activity.  Both are NDK
+# system libraries present on the device, so linking them into a test that does
+# not call them costs nothing.
 LIBS="-L$GUILIBDIR -lgnustep-gui \
  -L$BASELIBDIR -lgnustep-base \
  -L$GS_PREFIX/lib $(pkg-config --static --libs cairo) \
  -lobjc -licuuc -licui18n -licudata -liconv \
- -L$GS_DISPATCH_PREFIX/lib -ldispatch -lm"
+ -L$GS_DISPATCH_PREFIX/lib -ldispatch -lm -landroid -lmediandk"
 FLAGS="-fobjc-runtime=gnustep-2.2 -fblocks -fexceptions -DGNUSTEP \
  -DGNUSTEP_BASE_LIBRARY=1 -Wno-deprecated-declarations -Wno-objc-method-access"
 
