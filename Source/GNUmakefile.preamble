@@ -50,6 +50,12 @@ ifeq ($(WITH_EGL),yes)
 CONFIG_SYSTEM_LIB_DIR += -lGL -lEGL -lwayland-egl
 endif
 
+# The android server and its cairo surface call into the NDK's window API, so
+# the bundle links libandroid whichever of the two introduced the reference.
+ifeq ($(BUILD_SERVER),android)
+CONFIG_SYSTEM_LIB_DIR += -landroid
+endif
+
 #
 # Flags for compiling as a bundle or library (if the system depends
 # on having libraries specified).

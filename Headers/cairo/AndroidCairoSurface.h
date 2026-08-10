@@ -27,9 +27,18 @@
 
 #include "cairo/CairoSurface.h"
 
+#include <android/native_window.h>
+
 @interface AndroidCairoSurface : CairoSurface
 {
+  /* The window this surface posts to, or NULL while it is offscreen.  It is
+   * not retained: the server owns it and outlives the surface. */
+  ANativeWindow *_window;
 }
+
+- (void) setNativeWindow: (ANativeWindow *)window;
+- (ANativeWindow *) nativeWindow;
+
 @end
 
 #endif /* AndroidCairoSurface_h */

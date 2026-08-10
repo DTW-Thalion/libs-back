@@ -32,6 +32,9 @@
 
 #include <Foundation/NSDebug.h>
 
+#include <math.h>
+#include <stdint.h>
+
 @implementation AndroidCairoSurface
 
 /* device is the struct AndroidWindow the server keeps for this window id. */
@@ -133,17 +136,142 @@
       cairo_surface_destroy(_surface);
     }
   _surface = replacement;
+
+  /* A bound window keeps handing out buffers of the size it was last told,
+   * so a resize that does not reach it clips every later post to the old
+   * geometry. */
+  if (_window != NULL)
+    {
+      ANativeWindow_setBuffersGeometry(_window, w, h, WINDOW_FORMAT_RGBA_8888);
+    }
 }
 
-/* Nothing is on screen, so an expose has nothing to post: the image surface is
- * already the destination. */
+- (void) setNativeWindow: (ANativeWindow *)window
+{
+  _window = window;
+  if (_window != NULL && _surface != NULL)
+    {
+      ANativeWindow_setBuffersGeometry(_window,
+	cairo_image_surface_get_width(_surface),
+	cairo_image_surface_get_height(_surface),
+	WINDOW_FORMAT_RGBA_8888);
+    }
+}
+
+- (ANativeWindow *) nativeWindow
+{
+  return _window;
+}
+
+/* Copy rect out of the image surface and post it.
+ *
+ * rect is in cairo coordinates: y counts down from the top, which is what the
+ * callers convert to.  The destination stride comes from the buffer and is
+ * never computed from the width, since a window is entitled to hand out a
+ * wider row than it shows.  cairo's ARGB32 is a native-endian 32-bit word, so
+ * its bytes are B, G, R, A, where RGBA_8888 is R, G, B, A: every pixel is
+ * swizzled rather than copied.
+ */
+- (void) _postRect: (NSRect)rect
+{
+  ANativeWindow_Buffer	 buffer;
+  int			 sw, sh, x0, y0, x1, y1, x, y, srcStride;
+  unsigned char		*src;
+
+  if (_window == NULL || _surface == NULL)
+    {
+      return;
+    }
+
+  cairo_surface_flush(_surface);
+  sw = cairo_image_surface_get_width(_surface);
+  sh = cairo_image_surface_get_height(_surface);
+  srcStride = cairo_image_surface_get_stride(_surface);
+  src = cairo_image_surface_get_data(_surface);
+  if (src == NULL)
+    {
+      return;
+    }
+
+  /* cairo's own idea of the stride for this width, against the one the surface
+   * reports.  A mismatch means the surface is not the format the loop below
+   * assumes, and posting garbage silently is worse than saying so once. */
+  if (srcStride != cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, sw))
+    {
+      NSLog(@"AndroidCairoSurface: stride %d is not the %d ARGB32 needs for"
+	    @" width %d, not posting", srcStride,
+	    cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, sw), sw);
+      return;
+    }
+
+  x0 = (int)floor(NSMinX(rect));
+  y0 = (int)floor(NSMinY(rect));
+  x1 = (int)ceil(NSMaxX(rect));
+  y1 = (int)ceil(NSMaxY(rect));
+  if (x0 < 0) x0 = 0;
+  if (y0 < 0) y0 = 0;
+  if (x1 > sw) x1 = sw;
+  if (y1 > sh) y1 = sh;
+  if (x1 <= x0 || y1 <= y0)
+    {
+      return;
+    }
+
+  if (ANativeWindow_lock(_window, &buffer, NULL) != 0)
+    {
+      NSDebugLLog(@"AndroidCairoSurface", @"the window would not lock");
+      return;
+    }
+
+  /* The window is entitled to a buffer smaller than the surface; post what
+   * fits rather than writing past the end of it. */
+  if (x1 > buffer.width) x1 = buffer.width;
+  if (y1 > buffer.height) y1 = buffer.height;
+
+  for (y = y0; y < y1; y++)
+    {
+      uint32_t *s = (uint32_t *)(src + (size_t)y * srcStride);
+      uint32_t *d = (uint32_t *)((unsigned char *)buffer.bits
+				 + (size_t)y * buffer.stride * 4);
+
+      for (x = x0; x < x1; x++)
+	{
+	  uint32_t p = s[x];
+	  uint32_t a = (p >> 24) & 0xff;
+	  uint32_t r = (p >> 16) & 0xff;
+	  uint32_t g = (p >> 8) & 0xff;
+	  uint32_t b = p & 0xff;
+
+	  d[x] = (a << 24) | (b << 16) | (g << 8) | r;
+	}
+    }
+
+  ANativeWindow_unlockAndPost(_window);
+}
+
+/* An expose asks for what is already drawn to be shown again, so it posts the
+ * rect it names.  With no window there is nothing to post: the image surface
+ * is already the destination. */
 - (void) handleExposeRect: (NSRect)rect
 {
+  [self _postRect: rect];
+}
+
+/* A flush is a request for everything held back to reach the destination, so
+ * it posts the whole surface.  A caller that knows the damaged rectangle calls
+ * -handleExposeRect: instead and must not call both, or the window is posted
+ * twice for one drawing operation. */
+- (void) flush
+{
+  NSSize size = [self size];
+
+  [super flush];
+  [self _postRect: NSMakeRect(0, 0, size.width, size.height)];
 }
 
 - (BOOL) isDrawingToScreen
 {
-  return NO;
+  return (_window != NULL) ? YES : NO;
 }
 
 @end
