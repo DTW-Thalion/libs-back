@@ -181,6 +181,7 @@
 - (void) _postRect: (NSRect)rect
 {
   ANativeWindow_Buffer	 buffer;
+  ARect			 dirty;
   int			 sw, sh, x0, y0, x1, y1, x, y, srcStride;
   unsigned char		*src;
 
@@ -223,16 +224,41 @@
       return;
     }
 
-  if (ANativeWindow_lock(_window, &buffer, NULL) != 0)
+  /* The region to redraw is asked for rather than assumed.  A window locks one
+   * of several buffers in turn, so the one it hands out holds whatever was
+   * drawn into it some frames ago rather than what was posted last; the area
+   * that has to be written is therefore wider than the area that changed, and
+   * the window is the only thing that knows how much wider.  It reports that
+   * through the same argument, which is why the argument is not NULL.
+   */
+  dirty.left = x0;
+  dirty.top = y0;
+  dirty.right = x1;
+  dirty.bottom = y1;
+  if (ANativeWindow_lock(_window, &buffer, &dirty) != 0)
     {
       NSDebugLLog(@"AndroidCairoSurface", @"the window would not lock");
       return;
     }
 
+  x0 = dirty.left;
+  y0 = dirty.top;
+  x1 = dirty.right;
+  y1 = dirty.bottom;
+  if (x0 < 0) x0 = 0;
+  if (y0 < 0) y0 = 0;
+  if (x1 > sw) x1 = sw;
+  if (y1 > sh) y1 = sh;
+
   /* The window is entitled to a buffer smaller than the surface; post what
    * fits rather than writing past the end of it. */
   if (x1 > buffer.width) x1 = buffer.width;
   if (y1 > buffer.height) y1 = buffer.height;
+  if (x1 <= x0 || y1 <= y0)
+    {
+      ANativeWindow_unlockAndPost(_window);
+      return;
+    }
 
   for (y = y0; y < y1; y++)
     {
