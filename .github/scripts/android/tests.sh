@@ -105,6 +105,16 @@ cp "$BASELIBDIR"/libgnustep-base.so.* "$W/" 2>/dev/null
 cp "$GS_PREFIX/lib/libobjc.so" "$W/"
 cp "$TOOLCHAIN/sysroot/usr/lib/$GS_TRIPLE/libc++_shared.so" "$W/" 2>/dev/null
 cp "$GS_PREFIX"/lib/libicu*.so* "$W/" 2>/dev/null
+# Our ICU records a soname of its own -- libgsicuuc.so and friends -- because
+# /apex/com.android.i18n/lib64 ships libicuuc.so and libicui18n.so and an
+# application resolves those names to the platform's copies.  The loader looks
+# for the soname, so each library is staged under that name as well as its own.
+for f in "$GS_PREFIX"/lib/libicu*.so.*.*; do
+  [ -e "$f" ] || continue
+  sn=$("$TOOLCHAIN/bin/llvm-readelf" -d "$f" 2>/dev/null \
+         | sed -n 's/.*soname: \[\(.*\)\]/\1/p')
+  [ -n "$sn" ] && cp -L "$f" "$W/$sn"
+done
 cp "$GS_PREFIX"/lib/libiconv*.so* "$W/" 2>/dev/null
 cp "$GS_DISPATCH_PREFIX/lib/libdispatch.so" "$W/" 2>/dev/null
 
