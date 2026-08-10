@@ -78,6 +78,12 @@
       return nil;
     }
 
+  /* The record carries the window when the activity handed one over before
+   * AppKit asked for a surface, which is the order an activity works in: the
+   * window arrives with APP_CMD_INIT_WINDOW, and the surface is made later,
+   * when something is first drawn. */
+  [self setNativeWindow: window->native];
+
   window->surface = self;
   return self;
 }

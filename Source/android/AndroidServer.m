@@ -42,6 +42,7 @@
 
 #include "android/AndroidServer.h"
 #include "cairo/CairoSurface.h"
+#include "cairo/AndroidCairoSurface.h"
 
 /* Terminate cleanly if we get a signal to do so. */
 static void
@@ -162,6 +163,30 @@ sizeFromString(NSString *s)
     {
       return _screenBounds;
     }
+
+  /* A bound window knows the real size, so the default below is the answer
+   * only for a process that has no window at all -- which is every test but
+   * the ones that make one, and no application. */
+  {
+    NSMapEnumerator  e = NSEnumerateMapTable(_windows);
+    void	    *key, *value;
+
+    while (NSNextMapEnumeratorPair(&e, &key, &value))
+      {
+	struct AndroidWindow *w = (struct AndroidWindow *)value;
+
+	if (w != NULL && w->native != NULL)
+	  {
+	    _screenBounds = NSMakeRect(0, 0,
+				       ANativeWindow_getWidth(w->native),
+				       ANativeWindow_getHeight(w->native));
+	    _screenBoundsKnown = YES;
+	    NSEndMapTableEnumeration(&e);
+	    return _screenBounds;
+	  }
+      }
+    NSEndMapTableEnumeration(&e);
+  }
 
   size = sizeFromString([[NSUserDefaults standardUserDefaults]
 			  stringForKey: @"GSAndroidScreenSize"]);
@@ -442,8 +467,10 @@ sizeFromString(NSString *s)
   DPSinitclip(ctxt);
 }
 
-/* Nothing is on screen, so there is nothing to post: the image surface the
- * context drew into is already the destination. */
+/* With no window bound there is nothing to post: the image surface the context
+ * drew into is already the destination.  With one, the named rectangle is
+ * posted and only that: -flush posts the whole surface, so calling both would
+ * post the window twice for one drawing operation. */
 - (void) flushwindowrect: (NSRect)rect : (int)win
 {
   struct AndroidWindow *window = [self _windowWithId: win];
@@ -452,7 +479,47 @@ sizeFromString(NSString *s)
     {
       return;
     }
-  [window->surface flush];
+
+  if (window->native == NULL)
+    {
+      [window->surface flush];
+      return;
+    }
+
+  /* The rect arrives in the window's own coordinates, y up from the bottom;
+   * the image surface indexes its rows from the top. */
+  [window->surface
+    handleExposeRect: NSMakeRect(NSMinX(rect),
+				 NSHeight(window->frame) - NSMaxY(rect),
+				 NSWidth(rect),
+				 NSHeight(rect))];
+}
+
+- (void) setNativeWindow: (ANativeWindow *)native forWindow: (int)win
+{
+  struct AndroidWindow *window = [self _windowWithId: win];
+
+  if (window == NULL)
+    {
+      return;
+    }
+
+  window->native = native;
+  if (window->surface != nil)
+    {
+      [(AndroidCairoSurface *)window->surface setNativeWindow: native];
+    }
+
+  /* The screen is whatever the window says it is once there is one, so the
+   * cached answer has to be given up. */
+  _screenBoundsKnown = NO;
+}
+
+- (ANativeWindow *) nativeWindowForWindow: (int)win
+{
+  struct AndroidWindow *window = [self _windowWithId: win];
+
+  return (window == NULL) ? NULL : window->native;
 }
 
 /* Nothing shows a title, a document-edited mark, an input state, an alpha or a
