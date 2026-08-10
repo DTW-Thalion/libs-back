@@ -52,6 +52,7 @@ main(void)
   Class			 surfaceClass;
   id			 surface;
   struct AndroidWindow	 record;
+  struct AndroidWindow	*record2;
   cairo_t		*cr;
   uint8_t		*plane = NULL;
   int			 planeLen = 0, rowStride = 0, pixelStride = 0;
@@ -130,8 +131,76 @@ main(void)
   PASS(plane[(H - 1) * rowStride] == 255, "the last row was posted too");
 
   AImage_delete(image);
-  AImageReader_delete(reader);
+  image = NULL;
   DESTROY(surface);
+
+  /* The same path, reached the way AppKit reaches it: through the server, by
+   * window id, with the rect in the window's own coordinates. */
+  {
+    AndroidServer *server = nil;
+    int		   win;
+
+    NS_DURING
+      {
+	server = (AndroidServer *)GSCurrentServer();
+      }
+    NS_HANDLER
+      {
+	server = nil;
+      }
+    NS_ENDHANDLER
+
+    if (server == nil)
+      {
+	AImageReader_delete(reader);
+	SKIP("no display server, the binding cannot be checked")
+      }
+
+    win = [server window: NSMakeRect(0, 0, W, H) : NSBackingStoreBuffered
+			: NSBorderlessWindowMask : 0];
+    PASS(win > 0, "the server makes a window");
+
+    [server setNativeWindow: window forWindow: win];
+    PASS([server nativeWindowForWindow: win] == window,
+	 "the native window reads back from the server");
+
+    PASS(NSEqualRects([server boundsForScreen: 0], NSMakeRect(0, 0, W, H)),
+	 "the screen bounds come from the native window once one is bound");
+
+    /* Give the window a surface and paint it green, then post through the
+     * server rather than through the surface.  The record is reached with
+     * -_windowWithId:, which the server already declares, rather than by
+     * inventing an accessor for the test. */
+    [server setWindowdevice: win forContext: GSCurrentContext()];
+    record2 = [server _windowWithId: win];
+    PASS(record2 != NULL && record2->surface != nil,
+	 "the server gave the window a surface");
+    if (record2 == NULL || record2->surface == nil)
+      {
+	AImageReader_delete(reader);
+	SKIP("no surface for the window, the post cannot be checked")
+      }
+    cr = cairo_create([record2->surface surface]);
+    cairo_set_source_rgba(cr, 0.0, 1.0, 0.0, 1.0);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    [server flushwindowrect: NSMakeRect(0, 0, W, H) : win];
+
+    PASS(AImageReader_acquireNextImage(reader, &image) == AMEDIA_OK
+	 && image != NULL,
+	 "flushwindowrect:: posted through the server");
+    if (image != NULL)
+      {
+	AImage_getPlaneData(image, 0, &plane, &planeLen);
+	PASS(plane[0] == 0, "the red channel is 0 after the green paint");
+	PASS(plane[1] == 255, "the green channel is 255");
+	PASS(plane[2] == 0, "the blue channel is 0");
+	AImage_delete(image);
+      }
+  }
+
+  AImageReader_delete(reader);
   [arp release];
   END_SET("android post")
   return 0;

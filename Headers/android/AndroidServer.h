@@ -31,6 +31,8 @@
 #include <Foundation/NSMapTable.h>
 #include <GNUstepGUI/GSDisplayServer.h>
 
+#include <android/native_window.h>
+
 @class CairoSurface;
 
 /* One window as the server sees it.
@@ -51,6 +53,7 @@ struct AndroidWindow
   int                 screen;
   BOOL                mapped;
   CairoSurface       *surface;   /* nil until -setWindowdevice:forContext: */
+  ANativeWindow      *native;    /* NULL while the window is offscreen      */
 };
 
 @interface AndroidServer : GSDisplayServer
@@ -67,6 +70,12 @@ struct AndroidWindow
 
 /* The record for a window id, or NULL when the id is not one of ours. */
 - (struct AndroidWindow *) _windowWithId: (int)win;
+
+/* Bind the window an activity was given to one of ours, so that drawing
+ * reaches the screen instead of stopping at the image surface.  Passing NULL
+ * unbinds, which is what the activity losing its window means. */
+- (void) setNativeWindow: (ANativeWindow *)native forWindow: (int)win;
+- (ANativeWindow *) nativeWindowForWindow: (int)win;
 
 @end
 
