@@ -47,9 +47,6 @@ main(int argc, const char **argv)
   NSBezierPath *bp;
   NSArray *lines;
 
-  /* Ask whether a display server can be reached rather than whether X11's
-   * DISPLAY is set: a backend that is not X11 has no DISPLAY and would skip
-   * here while being perfectly able to run the test. */
   NS_DURING
     {
       [NSApplication sharedApplication];

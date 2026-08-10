@@ -105,9 +105,6 @@ main(int argc, const char **argv)
   CGFloat m[6] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
   NSAffineTransform *ctm = [NSAffineTransform transform];
 
-  /* Ask whether a display server can be reached rather than whether X11's
-   * DISPLAY is set: a backend that is not X11 has no DISPLAY and would skip
-   * here while being perfectly able to run the test. */
   NS_DURING
     {
       [NSApplication sharedApplication];
