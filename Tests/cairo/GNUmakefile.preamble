@@ -47,5 +47,11 @@ ADDITIONAL_INCLUDE_DIRS += -I$(GNUSTEP_BUILD_DIR)/../../Headers \
                            -I../../Headers -I../../Source \
                            $(shell pkg-config --cflags cairo)
 
-ADDITIONAL_TOOL_LIBS += $(shell pkg-config --libs cairo)
+# The surface posts through ANativeWindow, so a test that compiles it in links
+# libandroid as well as cairo.
+ADDITIONAL_TOOL_LIBS += $(shell pkg-config --libs cairo) -landroid
+
+# The post test needs a window to post into, and AImageReader supplies one
+# without an activity.  It is the only test that needs libmediandk.
+androidpost_TOOL_LIBS += -lmediandk
 endif
