@@ -4752,11 +4752,7 @@ _workAreas(Display *dpy, Window root, CGFloat screenHeight)
       frame.origin.y = (uint32_t)*items++;
       frame.size.width = (uint32_t)*items++;
       frame.size.height = (uint32_t)*items++;
-      /* X coordinates need to be flipped to OpenStep coordinates.  The origin
-       * says which end of the screen the reserved rows are at: a panel at the
-       * top and one at the bottom reserve the same number of rows and so give
-       * the same height, and only the origin tells them apart.
-       */
+      // X coordinates need to be flipped to OpenStep coordinates
       frame.origin.y = screenHeight - frame.origin.y - frame.size.height;
       [array addObject: [NSValue valueWithRect: frame]];
     }
@@ -4859,13 +4855,10 @@ _workAreas(Display *dpy, Window root, CGFloat screenHeight)
           monitorsCount = mi;
           if (monitorsCount != 0)
             {
-	      /* We can only use the work area provided by _NET_WORKAREA if we
-	       * have a single screen/monitor, because that property refers to
-	       * coordinates in the composite display formed by all the
-	       * available monitors.  The number of monitors is known only once
-	       * the outputs have been walked: an output the display is not
-	       * using has no CRTC and is not a monitor, and a driver reports an
-	       * output for every connector it supports.
+	      /* We can only use the work area provided by _NET_WORKAREA
+	       * if we have a single screen/monitor, because that property
+	       * refers to coordinates in the composite display formed by
+	       * all the available monitors.
 	       */
 	      if (1 == monitorsCount && workAreas != nil)
 		{

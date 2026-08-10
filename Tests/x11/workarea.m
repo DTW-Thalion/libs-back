@@ -1,16 +1,13 @@
 /* _NET_WORKAREA reports the area a window manager leaves usable, in X
  * coordinates, where y grows downwards.  A screen frame is in OpenStep
- * coordinates, where y grows upwards, so the work area's origin has to be
- * flipped against the full screen height like any other rectangle.
+ * coordinates, where y grows upwards, so the work area's origin is flipped
+ * against the full screen height.
  *
- * A panel at the top and a panel at the bottom reserve the same number of
- * rows and so report the same work area height; only the origin says which
- * end of the screen is reserved.  The two therefore have to produce different
- * screen frames.
+ * A work area at the top of the screen and one at the bottom have the same
+ * height and differ only in origin, so they give different screen frames.
  *
- * The property is read for a single monitor only, so this checks the monitor
- * count first and skips otherwise.  It drives the display server directly
- * rather than through NSApplication, since nothing here draws.
+ * The property is read for a single monitor only, so the monitor count is
+ * checked first and the test skips otherwise.
  */
 #import <Foundation/Foundation.h>
 #import "Testing.h"
