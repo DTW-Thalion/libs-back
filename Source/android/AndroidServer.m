@@ -551,6 +551,25 @@ sizeFromString(NSString *s)
     }
   _boundWindow = window->window_id;
   [self setNativeWindow: _activityWindow forWindow: window->window_id];
+
+  /* The platform gives an application the screen, so the window that has the
+   * surface is given the screen too: one smaller than it would sit in a corner
+   * with black around it and no way for a person to move it.  This is what a
+   * window manager does when it fullscreens a window, and -placewindow: is the
+   * road that reaches AppKit, resizes the surface and lets the application lay
+   * itself out again. */
+  {
+    NSRect screen = NSMakeRect(0.0, 0.0,
+      (CGFloat)ANativeWindow_getWidth(_activityWindow),
+      (CGFloat)ANativeWindow_getHeight(_activityWindow));
+
+    if (NSWidth(screen) > 0.0 && NSHeight(screen) > 0.0
+      && !NSEqualRects(window->frame, screen))
+      {
+	[self placewindow: screen : window->window_id];
+      }
+  }
+
   [self postEvent: [NSEvent otherEventWithType: NSAppKitDefined
 				      location: NSZeroPoint
 				 modifierFlags: 0
