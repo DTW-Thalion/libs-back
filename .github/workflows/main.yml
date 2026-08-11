@@ -16,6 +16,12 @@ on:
         default: "master"
         required: true
 
+# A run whose ref has been pushed again is answering a question about a tree
+# nobody is waiting on, and nothing cancels it without this.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ########### Linux ###########
   linux:
