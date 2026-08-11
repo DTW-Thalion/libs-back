@@ -32,9 +32,14 @@
 #include <Foundation/NSException.h>
 #include <AppKit/NSView.h>
 #include <AppKit/NSWindow.h>
+#include <GNUstepGUI/GSDisplayServer.h>
+#include <GLES2/gl2.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #include "android/AndroidOpenGL.h"
+#include "android/AndroidServer.h"
+#include "cairo/CairoSurface.h"
 
 static AndroidGLContext *currentGLContext = nil;
 
@@ -309,6 +314,139 @@ static AndroidGLContext *currentGLContext = nil;
       return;
     }
   currentGLContext = self;
+}
+
+/* The server's record for the window the view is in, or NULL. */
+- (struct AndroidWindow *) _windowRecord
+{
+  GSDisplayServer *server = GSCurrentServer();
+
+  if (_view == nil || [_view window] == nil
+    || [server isKindOfClass: [AndroidServer class]] == NO)
+    {
+      return NULL;
+    }
+
+  return [(AndroidServer *)server
+	   _windowWithId: (int)[[_view window] windowNumber]];
+}
+
+/* Read the pbuffer back into the window's cairo surface at the view's frame,
+ * and hand that rect to the surface to post.
+ *
+ * Three conversions happen in the copy and each is forced by the platform.
+ * glReadPixels answers GL_RGBA bytes, since GL_IMPLEMENTATION_COLOR_READ_FORMAT
+ * is GL_RGBA here and there is no GL_BGRA_EXT path, while cairo's ARGB32 is a
+ * native-endian word whose bytes are B, G, R, A.  GL's first row is the bottom
+ * of the image and cairo's is the top.  And ARGB32 is premultiplied, so a pixel
+ * that is not opaque is scaled by its own alpha.
+ */
+- (void) flushBuffer
+{
+  struct AndroidWindow *record;
+  cairo_surface_t      *cs;
+  NSRect		frame;
+  int			originX, originY;
+  int			width, height;
+  int			surfaceWidth, surfaceHeight, stride;
+  unsigned char	       *dst;
+  size_t		needed;
+  int			row, col;
+
+  if (_eglDisplay == EGL_NO_DISPLAY || _eglSurface == EGL_NO_SURFACE)
+    {
+      return;
+    }
+
+  record = [self _windowRecord];
+  if (record == NULL || record->surface == nil)
+    {
+      return;
+    }
+  cs = [record->surface surface];
+  if (cs == NULL || cairo_surface_status(cs) != CAIRO_STATUS_SUCCESS)
+    {
+      return;
+    }
+
+  width = _surfaceWidth;
+  height = _surfaceHeight;
+  if (width <= 0 || height <= 0)
+    {
+      return;
+    }
+
+  needed = (size_t)width * height * 4;
+  if (needed > _readbackSize)
+    {
+      unsigned char *grown = realloc(_readback, needed);
+
+      if (grown == NULL)
+	{
+	  NSLog(@"AndroidGLContext: no room for a %dx%d readback",
+	    width, height);
+	  return;
+	}
+      _readback = grown;
+      _readbackSize = needed;
+    }
+
+  glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, _readback);
+
+  cairo_surface_flush(cs);
+  surfaceWidth = cairo_image_surface_get_width(cs);
+  surfaceHeight = cairo_image_surface_get_height(cs);
+  stride = cairo_image_surface_get_stride(cs);
+  dst = cairo_image_surface_get_data(cs);
+  if (dst == NULL)
+    {
+      return;
+    }
+
+  frame = [_view convertRect: [_view bounds] toView: nil];
+  originX = (int)NSMinX(frame);
+  originY = surfaceHeight - (int)NSMaxY(frame);
+
+  for (row = 0; row < height; row++)
+    {
+      int	     dstRow = originY + row;
+      unsigned char *src;
+      uint32_t      *d;
+
+      if (dstRow < 0 || dstRow >= surfaceHeight)
+	{
+	  continue;
+	}
+      src = _readback + (size_t)(height - 1 - row) * width * 4;
+      d = (uint32_t *)(dst + (size_t)dstRow * stride);
+
+      for (col = 0; col < width; col++)
+	{
+	  int	   dstCol = originX + col;
+	  uint32_t r, g, b, a;
+
+	  if (dstCol < 0 || dstCol >= surfaceWidth)
+	    {
+	      continue;
+	    }
+	  r = src[col * 4 + 0];
+	  g = src[col * 4 + 1];
+	  b = src[col * 4 + 2];
+	  a = src[col * 4 + 3];
+
+	  if (a != 255)
+	    {
+	      r = (r * a + 127) / 255;
+	      g = (g * a + 127) / 255;
+	      b = (b * a + 127) / 255;
+	    }
+	  d[dstCol] = (a << 24) | (r << 16) | (g << 8) | b;
+	}
+    }
+
+  cairo_surface_mark_dirty_rectangle(cs, originX, originY, width, height);
+  [record->surface handleExposeRect:
+    NSMakeRect(originX, originY, width, height)];
 }
 
 - (void) getValues: (long *)vals forParameter: (NSOpenGLContextParameter)param
