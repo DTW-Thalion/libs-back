@@ -1772,6 +1772,11 @@ android_button(int32_t state)
 - (void) freecursor: (void *)cid { }
 
 #ifdef HAVE_EGL
+- glContextClass
+{
+  return [AndroidGLContext class];
+}
+
 - glPixelFormatClass
 {
   return [AndroidGLPixelFormat class];

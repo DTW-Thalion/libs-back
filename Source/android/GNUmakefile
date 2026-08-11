@@ -41,7 +41,8 @@ AndroidServer.m
 # The OpenGL ES support, where configure found EGL.
 ifeq ($(WITH_EGL),yes)
 android_OBJC_FILES += \
-AndroidGLPixelFormat.m
+AndroidGLPixelFormat.m \
+AndroidGLContext.m
 endif
 
 -include GNUmakefile.preamble
