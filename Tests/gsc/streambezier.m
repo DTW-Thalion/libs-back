@@ -2,10 +2,9 @@
  * the path line attributes, and then the path elements in order.
  *
  * GSStreamContext lives in the backend bundle, so the test needs a backend
- * loaded (hence a window server); it opens the display named by the
- * environment and skips when there is none.  The code under test is the same
- * for every backend; it is built for the cairo backend, which is the one that
- * loads on the test display.
+ * loaded (hence a window server); it skips when no display server can be
+ * reached.  The code under test is the same for every backend; it is built for
+ * the cairo backend.
  */
 #import <Foundation/Foundation.h>
 #import "Testing.h"
@@ -15,6 +14,7 @@
   && BUILD_GRAPHICS == GRAPHICS_cairo
 
 #import <AppKit/AppKit.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #include <stdlib.h>
 
 @interface NSObject (GSStreamContextBezier)
@@ -47,14 +47,13 @@ main(int argc, const char **argv)
   NSBezierPath *bp;
   NSArray *lines;
 
-  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
-    {
-      SKIP("no window server available")
-    }
-
   NS_DURING
     {
       [NSApplication sharedApplication];
+      if (nil == GSCurrentServer())
+	{
+	  SKIP("no window server available")
+	}
     }
   NS_HANDLER
     {

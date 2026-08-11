@@ -3,9 +3,9 @@
  * sample, standard-format RGB bitmap.  Anything else (planar, 16-bit, gray, or
  * a non-zero bitmap format such as alpha-first) is not compatible.
  *
- * It needs a window server (to load the backend), so it opens the display named
- * by the environment and skips when there is none, and it guards on the cairo
- * graphics backend being the one built.
+ * It needs a window server (to load the backend), so it skips when no display
+ * server can be reached, and it guards on the cairo graphics backend being the
+ * one built.
  */
 #import <Foundation/NSObject.h>
 #import "Testing.h"
@@ -15,6 +15,7 @@
   && BUILD_GRAPHICS == GRAPHICS_cairo
 
 #import <AppKit/AppKit.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #include <stdlib.h>
 
 @interface NSObject (CairoCompat)
@@ -39,14 +40,13 @@ main(int argc, const char **argv)
   id ctxt;
   NSBitmapImageRep *alphaFirst;
 
-  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
-    {
-      SKIP("no window server available")
-    }
-
   NS_DURING
     {
       [NSApplication sharedApplication];
+      if (nil == GSCurrentServer())
+	{
+	  SKIP("no window server available")
+	}
     }
   NS_HANDLER
     {

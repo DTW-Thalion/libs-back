@@ -3,9 +3,9 @@
  * cairo PDF and PS surfaces, and the resulting documents are checked for a
  * valid header, a non-trivial body and the expected document structure.
  *
- * It needs a window server (to load the backend), so it opens the display named
- * by the environment and skips when there is none, and it guards on the cairo
- * graphics backend being the one built.
+ * It needs a window server (to load the backend), so it skips when no display
+ * server can be reached, and it guards on the cairo graphics backend being the
+ * one built.
  */
 #import <Foundation/NSObject.h>
 #import "Testing.h"
@@ -15,6 +15,7 @@
   && BUILD_GRAPHICS == GRAPHICS_cairo
 
 #import <AppKit/AppKit.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -60,14 +61,13 @@ main(int argc, const char **argv)
   GSPdfPsTestView *v;
   NSData *pdf, *eps;
 
-  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
-    {
-      SKIP("no window server available")
-    }
-
   NS_DURING
     {
       [NSApplication sharedApplication];
+      if (nil == GSCurrentServer())
+	{
+	  SKIP("no window server available")
+	}
     }
   NS_HANDLER
     {

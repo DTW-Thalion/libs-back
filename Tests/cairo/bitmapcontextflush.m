@@ -14,6 +14,7 @@
   && BUILD_GRAPHICS == GRAPHICS_cairo
 
 #import <AppKit/AppKit.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #include <stdlib.h>
 
 int
@@ -24,12 +25,19 @@ main(int argc, const char **argv)
 
   START_SET("bitmap context flush")
 
-  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
+  NS_DURING
     {
-      SKIP("no window server available")
+      [NSApplication sharedApplication];
+      if (nil == GSCurrentServer())
+	{
+	  SKIP("no window server available")
+	}
     }
-
-  [NSApplication sharedApplication];
+  NS_HANDLER
+    {
+      SKIP("It looks like the GNUstep backend is not installed")
+    }
+  NS_ENDHANDLER
 
   rep = AUTORELEASE([[NSBitmapImageRep alloc]
     initWithBitmapDataPlanes: NULL

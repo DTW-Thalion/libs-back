@@ -3,10 +3,9 @@
  * a point or delta is mapped through it.
  *
  * GSGState lives in the backend bundle, so the test needs a backend loaded
- * (hence a window server); it opens the display named by the environment and
- * skips when there is none.  The code under test is the same for every backend;
- * it is built for the cairo backend, which is the one that loads on the test
- * display.
+ * (hence a window server); it skips when no display server can be reached.  The
+ * code under test is the same for every backend; it is built for the cairo
+ * backend.
  */
 #import <Foundation/Foundation.h>
 #import "Testing.h"
@@ -16,6 +15,7 @@
   && BUILD_GRAPHICS == GRAPHICS_cairo
 
 #import <AppKit/AppKit.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #include <stdlib.h>
 
 @interface NSObject (GSGStateCTM)
@@ -58,14 +58,13 @@ main(int argc, const char **argv)
   NSAffineTransformStruct s;
   CGFloat m[6] = {1, 0, 0, 1, 5, 6};
 
-  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
-    {
-      SKIP("no window server available")
-    }
-
   NS_DURING
     {
       [NSApplication sharedApplication];
+      if (nil == GSCurrentServer())
+	{
+	  SKIP("no window server available")
+	}
     }
   NS_HANDLER
     {
