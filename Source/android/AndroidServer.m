@@ -32,6 +32,7 @@
 #include <AppKit/NSEvent.h>
 #include <AppKit/NSGraphics.h>
 #include <AppKit/NSGraphicsContext.h>
+#include <AppKit/NSText.h>
 #include <AppKit/NSWindow.h>
 #include <AppKit/DPSOperators.h>
 #include <Foundation/NSArray.h>
@@ -396,6 +397,42 @@ sizeFromString(NSString *s)
       return;
     }
   window->mapped = (op != NSWindowOut);
+
+  /* An activity is given one surface and an application makes as many windows
+   * as it likes, so the surface goes to the one being shown.  A menu and an
+   * application icon are windows too and carry no title bar, which is what
+   * separates them from the window a person means by the application's. */
+  if (_activityWindow != NULL)
+    {
+      if (window->mapped == YES && win != _boundWindow
+	&& (window->style & NSTitledWindowMask) != 0)
+	{
+	  if (_boundWindow != 0)
+	    {
+	      [self setNativeWindow: NULL forWindow: _boundWindow];
+	    }
+	  _boundWindow = win;
+	  [self setNativeWindow: _activityWindow forWindow: win];
+	  /* The window was drawn before it had a surface, so what is on it is
+	   * not on the screen.  An expose is what asks for it again. */
+	  [self postEvent: [NSEvent otherEventWithType: NSAppKitDefined
+					      location: NSZeroPoint
+					 modifierFlags: 0
+					     timestamp:
+	    [[NSDate date] timeIntervalSinceReferenceDate]
+					  windowNumber: win
+					       context: GSCurrentContext()
+					       subtype: GSAppKitRegionExposed
+						 data1: (int)NSWidth(window->frame)
+						 data2: (int)NSHeight(window->frame)]
+		 atStart: NO];
+	}
+      else if (window->mapped == NO && win == _boundWindow)
+	{
+	  [self setNativeWindow: NULL forWindow: win];
+	  _boundWindow = 0;
+	}
+    }
 }
 
 - (void) setwindowlevel: (int)level : (int)win
@@ -520,6 +557,227 @@ sizeFromString(NSString *s)
   struct AndroidWindow *window = [self _windowWithId: win];
 
   return (window == NULL) ? NULL : window->native;
+}
+
+- (void) setActivityWindow: (ANativeWindow *)native
+{
+  _activityWindow = native;
+  if (native == NULL && _boundWindow != 0)
+    {
+      [self setNativeWindow: NULL forWindow: _boundWindow];
+      _boundWindow = 0;
+    }
+}
+
+- (ANativeWindow *) activityWindow
+{
+  return _activityWindow;
+}
+
+- (int) windowBoundToActivity
+{
+  return _boundWindow;
+}
+
+- (void) setJavaEnvironment: (JNIEnv *)env
+{
+  _jniEnv = env;
+}
+
+/* The activity reports a touch in the surface's own pixels, counted down from
+ * its top.  A window's buffer is its own size and the platform scales it to
+ * the surface, so the two differ by that scale whenever a window is not the
+ * size of the screen; and a window's coordinates count up from its bottom.
+ */
+- (NSPoint) _locationFor: (const AInputEvent *)event
+		inWindow: (struct AndroidWindow *)window
+{
+  float	 sw;
+  float	 sh;
+
+  if (window->native == NULL)
+    {
+      return NSZeroPoint;
+    }
+  sw = (float)ANativeWindow_getWidth(window->native);
+  sh = (float)ANativeWindow_getHeight(window->native);
+  if (sw <= 0.0 || sh <= 0.0)
+    {
+      return NSZeroPoint;
+    }
+  return NSMakePoint(
+    AMotionEvent_getX(event, 0) * NSWidth(window->frame) / sw,
+    NSHeight(window->frame)
+      - AMotionEvent_getY(event, 0) * NSHeight(window->frame) / sh);
+}
+
+/* A key with no character of its own.  The platform's table answers nothing
+ * for these and AppKit names them. */
+static unichar
+android_special_key(int32_t code)
+{
+  switch (code)
+    {
+      case AKEYCODE_DEL:         return NSBackspaceCharacter;
+      case AKEYCODE_FORWARD_DEL: return NSDeleteCharacter;
+      case AKEYCODE_ENTER:       return NSCarriageReturnCharacter;
+      case AKEYCODE_TAB:         return NSTabCharacter;
+      case AKEYCODE_ESCAPE:      return 0x1b;
+      case AKEYCODE_DPAD_UP:     return NSUpArrowFunctionKey;
+      case AKEYCODE_DPAD_DOWN:   return NSDownArrowFunctionKey;
+      case AKEYCODE_DPAD_LEFT:   return NSLeftArrowFunctionKey;
+      case AKEYCODE_DPAD_RIGHT:  return NSRightArrowFunctionKey;
+      default:                   return 0;
+    }
+}
+
+static NSUInteger
+android_modifiers(int32_t meta)
+{
+  NSUInteger flags = 0;
+
+  if (meta & AMETA_SHIFT_ON) flags |= NSShiftKeyMask;
+  if (meta & AMETA_ALT_ON)   flags |= NSAlternateKeyMask;
+  if (meta & AMETA_CTRL_ON)  flags |= NSControlKeyMask;
+  return flags;
+}
+
+/* android.view.KeyEvent holds the mapping from a key to a character; the NDK
+ * reports the code and the meta state and offers no character at all. */
+- (unichar) _characterForKey: (int32_t)code meta: (int32_t)meta
+{
+  static jclass    cls = NULL;
+  static jmethodID ctor = NULL;
+  static jmethodID unicode = NULL;
+  jobject	   event;
+  jint		   ch;
+
+  if (_jniEnv == NULL)
+    {
+      return 0;
+    }
+  if (cls == NULL)
+    {
+      jclass local = (*_jniEnv)->FindClass(_jniEnv, "android/view/KeyEvent");
+
+      if (local == NULL)
+	{
+	  (*_jniEnv)->ExceptionClear(_jniEnv);
+	  return 0;
+	}
+      cls = (*_jniEnv)->NewGlobalRef(_jniEnv, local);
+      ctor = (*_jniEnv)->GetMethodID(_jniEnv, cls, "<init>", "(II)V");
+      unicode = (*_jniEnv)->GetMethodID(_jniEnv, cls, "getUnicodeChar", "(I)I");
+    }
+  if (ctor == NULL || unicode == NULL)
+    {
+      return 0;
+    }
+  event = (*_jniEnv)->NewObject(_jniEnv, cls, ctor,
+    (jint)AKEY_EVENT_ACTION_DOWN, (jint)code);
+  if (event == NULL)
+    {
+      (*_jniEnv)->ExceptionClear(_jniEnv);
+      return 0;
+    }
+  ch = (*_jniEnv)->CallIntMethod(_jniEnv, event, unicode, (jint)meta);
+  (*_jniEnv)->DeleteLocalRef(_jniEnv, event);
+  return (unichar)ch;
+}
+
+- (BOOL) handleInputEvent: (const AInputEvent *)event
+{
+  struct AndroidWindow	*window;
+  NSTimeInterval	 now;
+
+  if (event == NULL || _boundWindow == 0)
+    {
+      return NO;
+    }
+  window = [self _windowWithId: _boundWindow];
+  if (window == NULL)
+    {
+      return NO;
+    }
+  now = [[NSDate date] timeIntervalSinceReferenceDate];
+
+  if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION)
+    {
+      NSEventType	type;
+      NSPoint		location;
+
+      switch (AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK)
+	{
+	  case AMOTION_EVENT_ACTION_DOWN:   type = NSLeftMouseDown;    break;
+	  case AMOTION_EVENT_ACTION_UP:     type = NSLeftMouseUp;      break;
+	  case AMOTION_EVENT_ACTION_MOVE:   type = NSLeftMouseDragged; break;
+	  case AMOTION_EVENT_ACTION_CANCEL: type = NSLeftMouseUp;      break;
+	  default:                          return NO;
+	}
+      location = [self _locationFor: event inWindow: window];
+      _mouseLocation = location;
+      [self postEvent: [NSEvent mouseEventWithType: type
+					  location: location
+				     modifierFlags: 0
+					 timestamp: now
+				      windowNumber: _boundWindow
+					   context: GSCurrentContext()
+				       eventNumber: 0
+					clickCount: 1
+					  pressure: 1.0
+				      buttonNumber: 0
+					    deltaX: 0.0
+					    deltaY: 0.0
+					    deltaZ: 0.0]
+	     atStart: NO];
+      return YES;
+    }
+
+  if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY)
+    {
+      NSEventType	 type;
+      int32_t		 code = AKeyEvent_getKeyCode(event);
+      int32_t		 meta = AKeyEvent_getMetaState(event);
+      unichar		 ch;
+      NSString		*characters;
+
+      /* The back key is the platform's own gesture. */
+      if (code == AKEYCODE_BACK)
+	{
+	  return NO;
+	}
+      switch (AKeyEvent_getAction(event))
+	{
+	  case AKEY_EVENT_ACTION_DOWN: type = NSKeyDown; break;
+	  case AKEY_EVENT_ACTION_UP:   type = NSKeyUp;   break;
+	  default:                     return NO;
+	}
+      ch = android_special_key(code);
+      if (ch == 0)
+	{
+	  ch = [self _characterForKey: code meta: meta];
+	}
+      if (ch == 0)
+	{
+	  return NO;
+	}
+      characters = [NSString stringWithCharacters: &ch length: 1];
+      [self postEvent: [NSEvent keyEventWithType: type
+					location: NSZeroPoint
+				   modifierFlags: android_modifiers(meta)
+				       timestamp: now
+				    windowNumber: _boundWindow
+					 context: GSCurrentContext()
+				      characters: characters
+		     charactersIgnoringModifiers: characters
+				       isARepeat:
+	  (AKeyEvent_getRepeatCount(event) > 0)
+					 keyCode: (unsigned short)code]
+	     atStart: NO];
+      return YES;
+    }
+
+  return NO;
 }
 
 /* Nothing shows a title, a document-edited mark, an input state, an alpha or a

@@ -31,7 +31,9 @@
 #include <Foundation/NSMapTable.h>
 #include <GNUstepGUI/GSDisplayServer.h>
 
+#include <android/input.h>
 #include <android/native_window.h>
+#include <jni.h>
 
 @class CairoSurface;
 
@@ -64,6 +66,9 @@ struct AndroidWindow
   BOOL        _screenBoundsKnown;
   BOOL        _screenWarningIssued;
   NSPoint     _mouseLocation;
+  ANativeWindow *_activityWindow; /* the surface an activity was handed      */
+  int         _boundWindow;       /* the window it is bound to, 0 for none   */
+  JNIEnv     *_jniEnv;            /* for the platform's key character table  */
 }
 
 + (void) initializeBackend;
@@ -76,6 +81,24 @@ struct AndroidWindow
  * unbinds, which is what the activity losing its window means. */
 - (void) setNativeWindow: (ANativeWindow *)native forWindow: (int)win;
 - (ANativeWindow *) nativeWindowForWindow: (int)win;
+
+/* The surface an activity owns.  An application creates its windows when it
+ * pleases and nothing outside knows their numbers, so the server binds this to
+ * the first window ordered front that a person would call the application's,
+ * and rebinds when that window goes away.  Passing NULL unbinds. */
+- (void) setActivityWindow: (ANativeWindow *)native;
+- (ANativeWindow *) activityWindow;
+
+/* The window the activity's surface is currently bound to, or 0. */
+- (int) windowBoundToActivity;
+
+/* The environment the key character table is read through.  The NDK reports a
+ * key by code and meta state and offers no character for it. */
+- (void) setJavaEnvironment: (JNIEnv *)env;
+
+/* Translate one event from the activity's input queue and post it.  Answers
+ * YES when the event became an NSEvent. */
+- (BOOL) handleInputEvent: (const AInputEvent *)event;
 
 @end
 
