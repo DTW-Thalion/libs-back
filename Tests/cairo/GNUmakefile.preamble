@@ -54,4 +54,14 @@ ADDITIONAL_TOOL_LIBS += $(shell pkg-config --libs cairo) -landroid
 # The post test needs a window to post into, and AImageReader supplies one
 # without an activity.  It is the only test that needs libmediandk.
 androidpost_TOOL_LIBS += -lmediandk
+
+# The GL tests call EGL and OpenGL ES for themselves, so they link the client
+# libraries, but only where the backend was built with EGL.  Without it they
+# compile to a skip, and a build on a system with no EGL would fail to link.
+ifeq ($(WITH_EGL),yes)
+androidglformat_TOOL_LIBS += -lEGL
+androidglcontext_TOOL_LIBS += -lEGL -lGLESv2
+androidglreadback_TOOL_LIBS += -lEGL -lGLESv2
+androidglresize_TOOL_LIBS += -lEGL -lGLESv2
+endif
 endif

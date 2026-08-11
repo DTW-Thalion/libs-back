@@ -38,6 +38,12 @@ SUBPROJECT_NAME=android
 android_OBJC_FILES = \
 AndroidServer.m
 
+# The OpenGL ES support, where configure found EGL.
+ifeq ($(WITH_EGL),yes)
+android_OBJC_FILES += \
+AndroidGLPixelFormat.m
+endif
+
 -include GNUmakefile.preamble
 
 include $(GNUSTEP_MAKEFILES)/subproject.make

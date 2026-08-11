@@ -48,6 +48,9 @@
 #include "android/AndroidServer.h"
 #include "cairo/CairoSurface.h"
 #include "cairo/AndroidCairoSurface.h"
+#ifdef HAVE_EGL
+#include "android/AndroidOpenGL.h"
+#endif
 
 /* Terminate cleanly if we get a signal to do so. */
 static void
@@ -1767,5 +1770,12 @@ android_button(int32_t state)
 - (void) recolorcursor: (NSColor *)fg : (NSColor *)bg : (void *)cid { }
 - (void) setcursor: (void *)cid { }
 - (void) freecursor: (void *)cid { }
+
+#ifdef HAVE_EGL
+- glPixelFormatClass
+{
+  return [AndroidGLPixelFormat class];
+}
+#endif
 
 @end
