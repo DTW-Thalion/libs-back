@@ -316,6 +316,19 @@ static AndroidGLContext *currentGLContext = nil;
   currentGLContext = self;
 }
 
+/* A pbuffer has the size it was created with, so a view that changed shape
+ * needs a new one.  -_ensureSurface compares the view's size with the surface's
+ * and replaces it only when they differ, so calling this every frame costs a
+ * comparison. */
+- (void) update
+{
+  if (_view == nil)
+    {
+      return;
+    }
+  [self _ensureSurface];
+}
+
 /* The server's record for the window the view is in, or NULL. */
 - (struct AndroidWindow *) _windowRecord
 {
