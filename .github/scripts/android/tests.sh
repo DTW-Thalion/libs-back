@@ -27,6 +27,16 @@ GS_TIMEOUT="${GS_TIMEOUT:-120}"
 
 TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
 CCPREFIX="$TOOLCHAIN/bin/${GS_TRIPLE}${GS_API}"
+
+# The cairo a test compiles against is the cross-built one, so pkg-config is
+# pointed at its .pc files, as back.sh points it.  LIBDIR replaces the default
+# search path rather than adding to it, which stops a host cairo answering for
+# the target.  Unset, pkg-config answers nothing at all here: cairo.h is then
+# absent from the include path and every test that includes it fails to build
+# while the rest of the suite compiles and runs.
+export PKG_CONFIG_PATH="$GS_PREFIX/lib/pkgconfig"
+export PKG_CONFIG_LIBDIR="$GS_PREFIX/lib/pkgconfig"
+
 TF=$(find "$GSROOT" -type d -name TestFramework | head -1)
 [ -n "$TF" ] || { echo "no TestFramework under $GSROOT"; exit 1; }
 
