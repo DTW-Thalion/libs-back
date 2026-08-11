@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A newer push on the same ref supersedes the run already going for it, and
+# nothing cancels that run without this. An Android run is ten minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android:
     strategy:
@@ -90,12 +96,58 @@ jobs:
     - name: Cross-build base, gui and the android backend
       run: libs-back/.github/scripts/android/back.sh
 
+    # Creating the AVD costs 83 to 90 seconds; restoring it costs 19 to 33.
+    # It depends on the image, not on anything in this repository, so the key
+    # is the ABI and the API level alone.
+    - name: AVD cache
+      uses: actions/cache@v5
+      id: avd-cache
+      with:
+        path: |
+          ~/.android/avd/*
+          ~/.android/adb*
+        key: avd-${{ matrix.abi }}-${{ matrix.api-level }}
+
+    - name: Create the AVD snapshot
+      if: steps.avd-cache.outputs.cache-hit != 'true'
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: ${{ matrix.api-level }}
+        arch: ${{ matrix.abi }}
+        target: default
+        force-avd-creation: false
+        emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+        disable-animations: true
+        script: echo "AVD snapshot created."
+
+    # -no-snapshot-save keeps the emulator from writing a snapshot as it shuts
+    # down, which would both cost time and rewrite the AVD the cache holds.
     - name: Run the test suite
       uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: ${{ matrix.api-level }}
         arch: ${{ matrix.abi }}
+        target: default
         force-avd-creation: false
-        emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+        emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
         disable-animations: true
         script: libs-back/.github/scripts/android/tests.sh
+
+    # The counts and the build logs, kept whatever the run concluded: a red run
+    # is the one whose logs are wanted, and the step that fails prints a tail
+    # rather than the whole of the log it was reading.
+    - name: Upload the run log
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: android-test-log-api${{ matrix.api-level }}
+        path: |
+          gs-run/results.txt
+          gs-run/unexpected.txt
+          gs-run/noresult.txt
+          gs-run/nobuild.txt
+          gs-src/tools-make-configure.log
+          libs-base/android-*.log
+          libs-gui/android-*.log
+          libs-back/android-*.log
+        if-no-files-found: warn
