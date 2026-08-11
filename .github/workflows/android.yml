@@ -99,9 +99,9 @@ jobs:
     # Creating the AVD costs 83 to 90 seconds; restoring it costs 19 to 33.
     # It depends on the image, not on anything in this repository, so the key
     # is the ABI and the API level alone.
-    - name: AVD cache
-      uses: actions/cache@v5
+    - name: Restore the AVD cache
       id: avd-cache
+      uses: actions/cache/restore@v5
       with:
         path: |
           ~/.android/avd/*
@@ -119,6 +119,19 @@ jobs:
         emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
         disable-animations: true
         script: echo "AVD snapshot created."
+
+    # Saved as its own step, for the reason the dependency cache above is:
+    # actions/cache writes nothing from a post step when the job has failed, so
+    # a red suite would leave the AVD to be created again on every later run.
+    # The image is saved as created, before the suite has run against it.
+    - name: Save the AVD cache
+      if: steps.avd-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: |
+          ~/.android/avd/*
+          ~/.android/adb*
+        key: ${{ steps.avd-cache.outputs.cache-primary-key }}
 
     # -no-snapshot-save keeps the emulator from writing a snapshot as it shuts
     # down, which would both cost time and rewrite the AVD the cache holds.
