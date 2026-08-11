@@ -1,16 +1,11 @@
 /* Drawing through AppKit reaches the android backend's image surface.
  *
- * This is the acceptance check for drawing offscreen: a window is made, its
- * device is set, rectangles are filled through AppKit, and the pixels are read
- * back out of the cairo image surface the backend drew into.  Asserting the
- * values rather than the absence of a crash is the point -- every drawing
- * primitive in the headless backend returns without doing anything, and a test
- * that only checked for an exception would pass there too.
+ * A window is made, its device is set, rectangles are filled through AppKit, and
+ * the pixels are read back out of the cairo image surface the backend drew into.
  *
  * The figures are axis-aligned and unantialiased, so the expected values are
- * exact and are worked out here rather than captured from a run.  ARGB32 is
- * premultiplied and in native byte order, so opaque black is 0xff000000 and
- * opaque white is 0xffffffff.
+ * exact.  ARGB32 is premultiplied and in native byte order, so opaque black is
+ * 0xff000000 and opaque white is 0xffffffff.
  */
 #import <Foundation/Foundation.h>
 #import "Testing.h"

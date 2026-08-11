@@ -3,6 +3,9 @@
 
    Copyright (C) 2026 Free Software Foundation, Inc.
 
+   Author: Todd White <todd.white@thalion.global>
+   Date: August 2026
+
    This file is part of GNUstep.
 
    This library is free software; you can redistribute it and/or
@@ -40,5 +43,21 @@
 - (ANativeWindow *) nativeWindow;
 
 @end
+
+/* Write one window's pixels into a buffer that is already locked, over the
+ * given region of it, leaving alone every pixel the window does not cover.
+ *
+ * An activity has one surface and an application has as many windows as it
+ * likes, so each window is written into that one buffer in turn, back to
+ * front.  The caller locks the buffer, clears the region and calls this once
+ * per window, so a window below cannot write over the one above it.
+ *
+ * frame is in screen coordinates, y up from the bottom; the buffer's rows count
+ * down from the top, which is what screenHeight turns one into the other.  The
+ * region is in the buffer's own coordinates.
+ */
+extern void
+GSAndroidBlitWindow(ANativeWindow_Buffer *buffer, cairo_surface_t *surface,
+  NSRect frame, int screenHeight, int x0, int y0, int x1, int y1);
 
 #endif /* AndroidCairoSurface_h */

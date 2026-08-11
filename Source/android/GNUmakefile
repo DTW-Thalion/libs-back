@@ -3,6 +3,9 @@
 #
 #  Copyright (C) 2026 Free Software Foundation, Inc.
 #
+#  Author: Adam Fedor <fedor@gnu.org>
+#  Author: Todd White <todd.white@thalion.global>
+#
 #  This file is part of the GNUstep Backend.
 #
 #  This library is free software; you can redistribute it and/or

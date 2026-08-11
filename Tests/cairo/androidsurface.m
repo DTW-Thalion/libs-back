@@ -1,15 +1,13 @@
 /* AndroidCairoSurface, checked directly.
  *
- * The surface is the only seam between drawing offscreen and drawing to a
- * window, so it is worth testing on its own rather than only through AppKit.
- * The real source file is compiled in (with a small CairoSurface stand-in,
- * exactly as Tests/cairo/shmbuffer.m does for the wayland surface), so this
- * needs no gui-linked back bundle and no display server.
+ * The real source file is compiled in, with a small CairoSurface stand-in, as
+ * Tests/cairo/shmbuffer.m does for the wayland surface, so this needs no
+ * gui-linked back bundle and no display server.
  *
- * A backend test can only build against the backend it belongs to, so it
- * guards on config.h's BUILD_SERVER and BUILD_GRAPHICS and skips cleanly
- * everywhere else.  The matching GNUmakefile.preamble adds cairo's headers and
- * libraries under the same condition.
+ * A backend test can only build against the backend it belongs to, so it guards
+ * on config.h's BUILD_SERVER and BUILD_GRAPHICS and skips everywhere else.  The
+ * matching GNUmakefile.preamble adds cairo's headers and libraries under the
+ * same condition.
  */
 #import <Foundation/Foundation.h>
 #import "Testing.h"
@@ -94,7 +92,6 @@ main(void)
         "painting opaque blue leaves 0xff0000ff in the first pixel")
     }
 
-  /* Resizing replaces the surface rather than lying about its size. */
   [s setSize: NSMakeSize(11, 5)];
   cs = [s surface];
   PASS(cs != NULL && cairo_image_surface_get_width(cs) == 11
@@ -106,7 +103,6 @@ main(void)
 
   [s release];
 
-  /* A zero-area window must not produce a surface that claims to work. */
   memset(&win, 0, sizeof(win));
   win.window_id = 8;
   win.frame = NSMakeRect(0, 0, 0, 0);

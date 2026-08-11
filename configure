@@ -7486,6 +7486,46 @@ printf '%s\n' "yes" >&6; }
 	have_fontconfig=yes
 fi
 
+# A fontconfig built as an archive keeps the libraries it needs in Libs.private,
+# and pkg-config reports those only when it is asked for a static link line.
+# Reading a configuration is what reaches them, so a link that does no more than
+# initialise the library can succeed while the backend, which parses one, fails
+# on expat's symbols.  The reported line is tried against a call that parses, and
+# the static line is used when it does not resolve.
+if test "$have_fontconfig" = yes; then
+  gs_save_LIBS="$LIBS"
+  LIBS="$FONTCONFIG_LIBS $LIBS"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <fontconfig/fontconfig.h>
+int
+main (void)
+{
+FcConfig *c = FcInitLoadConfig(); (void)c;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  gs_fontconfig_links=yes
+else case e in #(
+  e) gs_fontconfig_links=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+  LIBS="$gs_save_LIBS"
+  if test "$gs_fontconfig_links" = no; then
+    gs_fontconfig_static=`$PKG_CONFIG --static --libs fontconfig 2>/dev/null`
+    if test -n "$gs_fontconfig_static"; then
+      { printf '%s\n' "$as_me:${as_lineno-$LINENO}: fontconfig needs its static link line: $gs_fontconfig_static" >&5
+printf '%s\n' "$as_me: fontconfig needs its static link line: $gs_fontconfig_static" >&6;}
+      FONTCONFIG_LIBS="$gs_fontconfig_static"
+    fi
+  fi
+fi
+
 if test "$have_cairo" = no; then
   { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for cairo_create in -lcairo" >&5
 printf %s "checking for cairo_create in -lcairo... " >&6; }
@@ -8409,7 +8449,9 @@ printf '%s\n' "#define HAVE_EGL 1" >>confdefs.h
         LIBS="-lGL -lEGL -lwayland-egl $LIBS"
       fi
     elif test $BUILD_SERVER = android; then
-                        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: android" >&5
+                                                            CAIRO_LIBS="$CAIRO_LIBS $FONTCONFIG_LIBS"
+      CAIRO_CFLAGS="$CAIRO_CFLAGS $FONTCONFIG_CFLAGS"
+      { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: android" >&5
 printf '%s\n' "android" >&6; }
     fi
 

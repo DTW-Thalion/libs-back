@@ -3,6 +3,9 @@
 
    Copyright (C) 2026 Free Software Foundation, Inc.
 
+   Author: Todd White <todd.white@thalion.global>
+   Date: August 2026
+
    This file is part of the GNU Objective C Backend Library.
 
    This library is free software; you can redistribute it and/or
@@ -31,7 +34,10 @@
 #include <Foundation/NSMapTable.h>
 #include <GNUstepGUI/GSDisplayServer.h>
 
+#include <android/input.h>
+#include <android/native_activity.h>
 #include <android/native_window.h>
+#include <jni.h>
 
 @class CairoSurface;
 
@@ -52,6 +58,7 @@ struct AndroidWindow
   int                 level;
   int                 screen;
   BOOL                mapped;
+  unsigned            ordered;   /* when it was last ordered in            */
   CairoSurface       *surface;   /* nil until -setWindowdevice:forContext: */
   ANativeWindow      *native;    /* NULL while the window is offscreen      */
 };
@@ -64,7 +71,28 @@ struct AndroidWindow
   BOOL        _screenBoundsKnown;
   BOOL        _screenWarningIssued;
   NSPoint     _mouseLocation;
+  ANativeWindow *_activityWindow; /* the surface an activity was handed      */
+  int         _boundWindow;       /* the window it is bound to, 0 for none   */
+  unsigned    _orderSeq;          /* counts orderings, to find the front one */
+  int         _mouseButton;       /* the button a drag and an up belong to   */
+  int         _clickCount;        /* presses close together, AppKit's count  */
+  NSTimeInterval _lastClickTime;
+  NSPoint     _lastClickLocation;
+  NSTimeInterval _doubleTapTimeout;  /* 0 until the platform has been asked  */
+  JNIEnv     *_jniEnv;            /* for the platform's key character table  */
+  ANativeActivity *_activity;     /* for the input method, NULL without one  */
+  BOOL        _keyboardShown;     /* what the input method was last asked    */
+  NSRect      _announcedScreen;   /* the screen the gui library was told of  */
+  BOOL        _inScreenChange;    /* moving windows orders them, which is us */
 }
+
+/* How far apart two presses may be, in pixels, and still count as one click.
+ * The platform's own tolerance is ViewConfiguration -getScaledDoubleTapSlop,
+ * which is scaled by the screen density and reached through a ViewConfiguration
+ * made from a Context; the server is given a JNIEnv and no Context, so this
+ * stands in for it.
+ */
+#define	GS_ANDROID_CLICK_SLOP	16
 
 + (void) initializeBackend;
 
@@ -76,6 +104,29 @@ struct AndroidWindow
  * unbinds, which is what the activity losing its window means. */
 - (void) setNativeWindow: (ANativeWindow *)native forWindow: (int)win;
 - (ANativeWindow *) nativeWindowForWindow: (int)win;
+
+/* The surface an activity owns.  An application creates its windows when it
+ * pleases and nothing outside knows their numbers, so the server binds this to
+ * the first window ordered front that a person would call the application's,
+ * and rebinds when that window goes away.  Passing NULL unbinds. */
+- (void) setActivityWindow: (ANativeWindow *)native;
+- (ANativeWindow *) activityWindow;
+
+/* The window the activity's surface is currently bound to, or 0. */
+- (int) windowBoundToActivity;
+
+/* The environment the key character table is read through.  The NDK reports a
+ * key by code and meta state and offers no character for it. */
+- (void) setJavaEnvironment: (JNIEnv *)env;
+
+/* Translate one event from the activity's input queue and post it.  Answers
+ * YES when the event became an NSEvent. */
+- (BOOL) handleInputEvent: (const AInputEvent *)event;
+
+/* The activity the input method is shown and hidden through.  A device with no
+ * keyboard of its own has one on the screen, and it is shown only while
+ * something is being edited.  Passing NULL leaves the keyboard alone. */
+- (void) setActivity: (ANativeActivity *)activity;
 
 @end
 

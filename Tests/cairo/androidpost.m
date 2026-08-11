@@ -164,13 +164,19 @@ main(void)
     PASS([server nativeWindowForWindow: win] == window,
 	 "the native window reads back from the server");
 
+    /* The screen is the activity's surface, not a window's: an activity is
+     * given one surface and every window is written into it. */
+    [server setActivityWindow: window];
     PASS(NSEqualRects([server boundsForScreen: 0], NSMakeRect(0, 0, W, H)),
-	 "the screen bounds come from the native window once one is bound");
+	 "the screen bounds come from the activity's surface");
 
     /* Give the window a surface and paint it green, then post through the
      * server rather than through the surface.  The record is reached with
      * -_windowWithId:, which the server already declares, rather than by
      * inventing an accessor for the test. */
+    /* Only a window that is on screen is written into the activity's surface,
+     * so this one is ordered in before it is posted. */
+    [server orderwindow: NSWindowAbove : 0 : win];
     [server setWindowdevice: win forContext: GSCurrentContext()];
     record2 = [server _windowWithId: win];
     PASS(record2 != NULL && record2->surface != nil,
