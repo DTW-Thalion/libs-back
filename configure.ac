@@ -715,7 +715,7 @@ if test x"$BUILD_GRAPHICS" = "xcairo"; then
       AC_CHECK_LIB(EGL, eglGetDisplay, [have_egl=yes], [have_egl=no])
       if test "x$have_egl_h" = "xyes" -a "x$have_egl" = "xyes"; then
         WITH_EGL=yes
-        AC_DEFINE(HAVE_EGL, 1, [Define if EGL is available for Wayland OpenGL support])
+        AC_DEFINE(HAVE_EGL, 1, [Define if EGL is available for OpenGL support])
         LIBS="-lGL -lEGL -lwayland-egl $LIBS"
       fi
     elif test $BUILD_SERVER = android; then
@@ -730,6 +730,21 @@ if test x"$BUILD_GRAPHICS" = "xcairo"; then
       dnl "Can't load object file from backend" and says nothing more.
       CAIRO_LIBS="$CAIRO_LIBS $FONTCONFIG_LIBS"
       CAIRO_CFLAGS="$CAIRO_CFLAGS $FONTCONFIG_CFLAGS"
+      dnl Optional OpenGL ES support.  A GL drawable on this backend is an EGL
+      dnl pbuffer whose pixels are read back and composited, so only EGL and the
+      dnl ES client libraries are wanted; the platform offers no desktop GL and
+      dnl refuses eglBindAPI(EGL_OPENGL_API).  A backend without EGL is still a
+      dnl usable backend, so this is not fatal.
+      WITH_EGL=no
+      AC_CHECK_HEADER(EGL/egl.h, [have_egl_h=yes], [have_egl_h=no])
+      AC_CHECK_LIB(EGL, eglGetDisplay, [have_egl=yes], [have_egl=no])
+      if test "x$have_egl_h" = "xyes" -a "x$have_egl" = "xyes"; then
+        WITH_EGL=yes
+        AC_DEFINE(HAVE_EGL, 1, [Define if EGL is available for OpenGL support])
+        LIBS="-lEGL -lGLESv2 -lGLESv1_CM $LIBS"
+      else
+        AC_MSG_NOTICE([Warning : no OpenGL support for android backend])
+      fi
       AC_MSG_RESULT(android)
     fi
 AC_SUBST(WITH_EGL)

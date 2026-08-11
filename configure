@@ -8451,6 +8451,77 @@ printf '%s\n' "#define HAVE_EGL 1" >>confdefs.h
     elif test $BUILD_SERVER = android; then
                                                             CAIRO_LIBS="$CAIRO_LIBS $FONTCONFIG_LIBS"
       CAIRO_CFLAGS="$CAIRO_CFLAGS $FONTCONFIG_CFLAGS"
+                                    WITH_EGL=no
+      ac_fn_c_check_header_compile "$LINENO" "EGL/egl.h" "ac_cv_header_EGL_egl_h" "$ac_includes_default"
+if test "x$ac_cv_header_EGL_egl_h" = xyes
+then :
+  have_egl_h=yes
+else case e in #(
+  e) have_egl_h=no ;;
+esac
+fi
+
+      { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for eglGetDisplay in -lEGL" >&5
+printf %s "checking for eglGetDisplay in -lEGL... " >&6; }
+if test ${ac_cv_lib_EGL_eglGetDisplay+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) ac_check_lib_save_LIBS=$LIBS
+LIBS="-lEGL  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.
+   The 'extern "C"' is for builds by C++ compilers;
+   although this is not generally supported in C code supporting it here
+   has little cost and some practical benefit (sr 110532).  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char eglGetDisplay (void);
+int
+main (void)
+{
+return eglGetDisplay ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_EGL_eglGetDisplay=yes
+else case e in #(
+  e) ac_cv_lib_EGL_eglGetDisplay=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS ;;
+esac
+fi
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_EGL_eglGetDisplay" >&5
+printf '%s\n' "$ac_cv_lib_EGL_eglGetDisplay" >&6; }
+if test "x$ac_cv_lib_EGL_eglGetDisplay" = xyes
+then :
+  have_egl=yes
+else case e in #(
+  e) have_egl=no ;;
+esac
+fi
+
+      if test "x$have_egl_h" = "xyes" -a "x$have_egl" = "xyes"; then
+        WITH_EGL=yes
+
+printf '%s\n' "#define HAVE_EGL 1" >>confdefs.h
+
+        LIBS="-lEGL -lGLESv2 -lGLESv1_CM $LIBS"
+      else
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: Warning : no OpenGL support for android backend" >&5
+printf '%s\n' "$as_me: Warning : no OpenGL support for android backend" >&6;}
+      fi
       { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: android" >&5
 printf '%s\n' "android" >&6; }
     fi

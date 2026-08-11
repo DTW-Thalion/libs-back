@@ -30,7 +30,7 @@
 /* Define to 1 if you have the <DPS/dpsNXargs.h> header file. */
 #undef HAVE_DPS_DPSNXARGS_H
 
-/* Define if EGL is available for Wayland OpenGL support */
+/* Define if EGL is available for OpenGL support */
 #undef HAVE_EGL
 
 /* Define if you have FcPatternCreate */

@@ -46,7 +46,10 @@ CONFIG_SYSTEM_INCL += $(GRAPHIC_CFLAGS)
 # Additional library directories the linker should search
 #ADDITIONAL_LIB_DIRS +=
 CONFIG_SYSTEM_LIB_DIR += $(GRAPHIC_LFLAGS)
-ifeq ($(WITH_EGL),yes)
+# The EGL platform binding is the compositor's own, and desktop GL exists only
+# where the wayland server does; the android backend renders OpenGL ES into a
+# pbuffer and takes its client libraries from GRAPHIC_LIBS.
+ifeq ($(BUILD_SERVER)-$(WITH_EGL),wayland-yes)
 CONFIG_SYSTEM_LIB_DIR += -lGL -lEGL -lwayland-egl
 endif
 
