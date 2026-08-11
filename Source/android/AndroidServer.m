@@ -585,30 +585,27 @@ sizeFromString(NSString *s)
 }
 
 /* The activity reports a touch in the surface's own pixels, counted down from
- * its top.  A window's buffer is its own size and the platform scales it to
- * the surface, so the two differ by that scale whenever a window is not the
- * size of the screen; and a window's coordinates count up from its bottom.
+ * its top; a window sits somewhere in that surface and its own coordinates
+ * count up from its bottom.  The surface is not scaled to the window, so this
+ * is a move of the origin and a flip, with no factor in it.
  */
 - (NSPoint) _locationFor: (const AInputEvent *)event
 		inWindow: (struct AndroidWindow *)window
 {
-  float	 sw;
-  float	 sh;
+  float	 screenHeight;
 
   if (window->native == NULL)
     {
       return NSZeroPoint;
     }
-  sw = (float)ANativeWindow_getWidth(window->native);
-  sh = (float)ANativeWindow_getHeight(window->native);
-  if (sw <= 0.0 || sh <= 0.0)
+  screenHeight = (float)ANativeWindow_getHeight(window->native);
+  if (screenHeight <= 0.0)
     {
       return NSZeroPoint;
     }
   return NSMakePoint(
-    AMotionEvent_getX(event, 0) * NSWidth(window->frame) / sw,
-    NSHeight(window->frame)
-      - AMotionEvent_getY(event, 0) * NSHeight(window->frame) / sh);
+    AMotionEvent_getX(event, 0) - NSMinX(window->frame),
+    (screenHeight - AMotionEvent_getY(event, 0)) - NSMinY(window->frame));
 }
 
 /* A key with no character of its own.  The platform's table answers nothing
