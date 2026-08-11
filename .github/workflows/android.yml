@@ -159,6 +159,7 @@ jobs:
           gs-run/unexpected.txt
           gs-run/noresult.txt
           gs-run/nobuild.txt
+          gs-run/cc-*.log
           gs-src/tools-make-configure.log
           libs-base/android-*.log
           libs-gui/android-*.log
