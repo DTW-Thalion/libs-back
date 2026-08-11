@@ -404,28 +404,9 @@ sizeFromString(NSString *s)
    * separates them from the window a person means by the application's. */
   if (_activityWindow != NULL)
     {
-      if (window->mapped == YES && win != _boundWindow
-	&& (window->style & NSTitledWindowMask) != 0)
+      if (win != _boundWindow && [self _isCandidate: window] == YES)
 	{
-	  if (_boundWindow != 0)
-	    {
-	      [self setNativeWindow: NULL forWindow: _boundWindow];
-	    }
-	  _boundWindow = win;
-	  [self setNativeWindow: _activityWindow forWindow: win];
-	  /* The window was drawn before it had a surface, so what is on it is
-	   * not on the screen.  An expose is what asks for it again. */
-	  [self postEvent: [NSEvent otherEventWithType: NSAppKitDefined
-					      location: NSZeroPoint
-					 modifierFlags: 0
-					     timestamp:
-	    [[NSDate date] timeIntervalSinceReferenceDate]
-					  windowNumber: win
-					       context: GSCurrentContext()
-					       subtype: GSAppKitRegionExposed
-						 data1: (int)NSWidth(window->frame)
-						 data2: (int)NSHeight(window->frame)]
-		 atStart: NO];
+	  [self _bindActivityTo: window];
 	}
       else if (window->mapped == NO && win == _boundWindow)
 	{
@@ -559,14 +540,80 @@ sizeFromString(NSString *s)
   return (window == NULL) ? NULL : window->native;
 }
 
+/* Give the surface to one window and ask for it to be drawn again: whatever is
+ * on that window was drawn before it had a surface, so none of it has reached
+ * the screen. */
+- (void) _bindActivityTo: (struct AndroidWindow *)window
+{
+  if (_boundWindow != 0 && _boundWindow != window->window_id)
+    {
+      [self setNativeWindow: NULL forWindow: _boundWindow];
+    }
+  _boundWindow = window->window_id;
+  [self setNativeWindow: _activityWindow forWindow: window->window_id];
+  [self postEvent: [NSEvent otherEventWithType: NSAppKitDefined
+				      location: NSZeroPoint
+				 modifierFlags: 0
+				     timestamp:
+    [[NSDate date] timeIntervalSinceReferenceDate]
+				  windowNumber: window->window_id
+				       context: GSCurrentContext()
+				       subtype: GSAppKitRegionExposed
+					 data1: (int)NSWidth(window->frame)
+					 data2: (int)NSHeight(window->frame)]
+	 atStart: NO];
+}
+
+/* A window a person would call the application's: on screen, and carrying a
+ * title bar, which a menu and an application icon do not. */
+- (BOOL) _isCandidate: (struct AndroidWindow *)window
+{
+  return (window != NULL && window->mapped == YES
+    && (window->style & NSTitledWindowMask) != 0) ? YES : NO;
+}
+
 - (void) setActivityWindow: (ANativeWindow *)native
 {
   _activityWindow = native;
-  if (native == NULL && _boundWindow != 0)
+
+  if (native == NULL)
     {
-      [self setNativeWindow: NULL forWindow: _boundWindow];
-      _boundWindow = 0;
+      /* The activity is giving its surface up.  Nothing may be posted to it
+       * after this returns, so the binding goes now rather than when the
+       * window is next ordered out. */
+      if (_boundWindow != 0)
+	{
+	  [self setNativeWindow: NULL forWindow: _boundWindow];
+	  _boundWindow = 0;
+	}
+      return;
     }
+
+  /* A surface arriving is the other half: on a resume the application orders
+   * nothing, so the window that was on screen has to be found again. */
+  {
+    struct AndroidWindow *window = [self _windowWithId: _boundWindow];
+    NSMapEnumerator	  e;
+    void		 *key;
+    void		 *value;
+
+    if ([self _isCandidate: window] == YES)
+      {
+	[self _bindActivityTo: window];
+	return;
+      }
+    _boundWindow = 0;
+    e = NSEnumerateMapTable(_windows);
+    while (NSNextMapEnumeratorPair(&e, &key, &value) == YES)
+      {
+	if ([self _isCandidate: (struct AndroidWindow *)value] == YES)
+	  {
+	    [self _bindActivityTo: (struct AndroidWindow *)value];
+	    break;
+	  }
+      }
+    NSEndMapTableEnumeration(&e);
+  }
 }
 
 - (ANativeWindow *) activityWindow
